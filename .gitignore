@@ -9,3 +9,6 @@ Thumbs.db
 # Backup files
 *.bak
 *.backup
+
+# Local configuration
+samba-share.conf
