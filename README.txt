@@ -48,12 +48,13 @@ CONFIGURATION (Config Sheet)
 ----------------------------
 | Setting              | Default | Description                    |
 |----------------------|---------|--------------------------------|
-| Font Size - Box      | 8       | Font size for Box field        |
-| Font Size - Bin      | 8       | Font size for Bin field        |
-| Font Size - Label 1  | 7       | Font size for first label row  |
-| Font Size - Label 2  | 6       | Font size for second label row |
-| Font Size - Label 3  | 6       | Font size for third label row  |
+| Font Size - Box      | 150     | Font size in points for Box    |
+| Font Size - Bin      | 150     | Font size in points for Bin    |
+| Font Size - Label 1  | 120     | Font size in points for Line 1 |
+| Font Size - Label 2  | 80      | Font size in points for Line 2 |
+| Font Size - Label 3  | 60      | Font size in points for Line 3 |
 | Output Mode          | DRY_RUN | PRINT or DRY_RUN               |
+| Show Complete Message| NO      | YES or NO - show completion msg|
 
 LABEL LAYOUT
 ------------
