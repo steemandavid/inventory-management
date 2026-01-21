@@ -38,6 +38,7 @@ Const CFG_ROW_FONT_LABEL2 = 4
 Const CFG_ROW_FONT_LABEL3 = 5
 Const CFG_ROW_OUTPUT_MODE = 6
 Const CFG_ROW_SHOW_COMPLETE = 7
+Const CFG_ROW_EXPORT_PATH = 8
 
 REM ============================================================
 REM  Configuration Type
@@ -51,6 +52,7 @@ Type LabelConfig
     OutputMode As String
     IsDryRun As Boolean
     ShowCompleteMsg As Boolean
+    ExportPath As String
 End Type
 
 REM ============================================================
@@ -220,12 +222,36 @@ Function ReadConfiguration(oDoc As Object) As LabelConfig
     showCompleteValue = UCase(Trim(oConfigSheet.getCellByPosition(CFG_COL_VALUE, CFG_ROW_SHOW_COMPLETE).String))
     config.ShowCompleteMsg = (showCompleteValue <> "NO")
 
-    REM Apply defaults if values are missing
-    If config.FontSizeBox <= 0 Then config.FontSizeBox = 150
-    If config.FontSizeBin <= 0 Then config.FontSizeBin = 150
-    If config.FontSizeLabel1 <= 0 Then config.FontSizeLabel1 = 120
-    If config.FontSizeLabel2 <= 0 Then config.FontSizeLabel2 = 80
-    If config.FontSizeLabel3 <= 0 Then config.FontSizeLabel3 = 60
+    REM Read export path (default to document's folder)
+    config.ExportPath = Trim(oConfigSheet.getCellByPosition(CFG_COL_VALUE, CFG_ROW_EXPORT_PATH).String)
+    If config.ExportPath = "" Then
+        REM Use document's folder as default
+        Dim docURL As String
+        Dim lastSlash As Integer
+        Dim i As Integer
+        docURL = oDoc.URL
+        If docURL <> "" Then
+            REM Find last slash (InStrRev replacement)
+            lastSlash = 0
+            For i = Len(docURL) To 1 Step -1
+                If Mid(docURL, i, 1) = "/" Then
+                    lastSlash = i
+                    Exit For
+                End If
+            Next i
+            If lastSlash > 0 Then
+                config.ExportPath = Left(docURL, lastSlash)
+            End If
+        End If
+    End If
+
+    REM Apply defaults if values are missing (font sizes in points)
+    REM Optimized for 12mm label height (~34 points)
+    If config.FontSizeBox <= 0 Then config.FontSizeBox = 14
+    If config.FontSizeBin <= 0 Then config.FontSizeBin = 12
+    If config.FontSizeLabel1 <= 0 Then config.FontSizeLabel1 = 9
+    If config.FontSizeLabel2 <= 0 Then config.FontSizeLabel2 = 7
+    If config.FontSizeLabel3 <= 0 Then config.FontSizeLabel3 = 6
 
     ReadConfiguration = config
 End Function
@@ -370,7 +396,6 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
     Dim oText As Object
     Dim oCursor As Object
     Dim oTable As Object
-    Dim oCell As Object
     Dim oPageStyles As Object
     Dim oPageStyle As Object
     Dim printOpts(0) As New com.sun.star.beans.PropertyValue
@@ -399,100 +424,68 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
 
     oLabelDoc = oDesktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, loadProps())
 
-    REM Configure page size for label
-    REM Dymo 30334: Physical label is 12mm wide x 50mm tall as it comes out of printer
-    REM We create a portrait page matching the printer output
+    REM Configure page size for label - LANDSCAPE orientation
+    REM Dymo 30334: 12mm x 50mm label
+    REM Landscape: 50mm wide x 12mm tall (readable orientation)
     oPageStyles = oLabelDoc.StyleFamilies.getByName("PageStyles")
     oPageStyle = oPageStyles.getByName("Standard")
 
-    oPageStyle.IsLandscape = False
-    oPageStyle.Width = 12000        ' 12mm width (label width)
-    oPageStyle.Height = 50000       ' 50mm height (label length)
-    oPageStyle.LeftMargin = 100     ' 0.1mm margins
-    oPageStyle.RightMargin = 100
-    oPageStyle.TopMargin = 100
-    oPageStyle.BottomMargin = 100
+    oPageStyle.IsLandscape = True
+    oPageStyle.Width = LABEL_WIDTH   ' 50mm (5000 in 1/100mm)
+    oPageStyle.Height = LABEL_HEIGHT ' 12mm (1200 in 1/100mm)
+    oPageStyle.LeftMargin = 30       ' ~0.3mm minimal margins
+    oPageStyle.RightMargin = 30
+    oPageStyle.TopMargin = 30
+    oPageStyle.BottomMargin = 30
 
-    REM Calculate usable dimensions (portrait: 12mm wide x 50mm tall)
+    REM Calculate usable dimensions (landscape: 50mm wide x 12mm tall)
     Dim usableWidth As Long
     Dim usableHeight As Long
-    usableWidth = 12000 - 200       ' 11.8mm width
-    usableHeight = 50000 - 200      ' 49.8mm height
+    usableWidth = LABEL_WIDTH - 60   ' ~49.4mm
+    usableHeight = LABEL_HEIGHT - 60 ' ~11.4mm
 
-    REM Create a text frame rotated 90 degrees to hold horizontal content
+    REM Create table directly in the document (no frame needed for landscape)
     oText = oLabelDoc.Text
     oCursor = oText.createTextCursor()
     oCursor.ParaTopMargin = 0
     oCursor.ParaBottomMargin = 0
 
-    Dim oFrame As Object
-    oFrame = oLabelDoc.createInstance("com.sun.star.text.TextFrame")
+    oTable = oLabelDoc.createInstance("com.sun.star.text.TextTable")
+    oTable.initialize(1, 2)
+    oText.insertTextContent(oCursor, oTable, False)
 
-    REM Frame size: swap dimensions for rotated content
-    REM Content is 50mm wide x 12mm tall, rotated 90 degrees CCW
-    oFrame.Width = usableHeight      ' 49.8mm (will be horizontal after rotation)
-    oFrame.Height = usableWidth      ' 11.8mm (will be vertical after rotation)
+    REM Set table to fill page width
+    oTable.Width = usableWidth
+    oTable.HoriOrient = com.sun.star.text.HoriOrientation.NONE
+    oTable.LeftMargin = 0
+    oTable.RightMargin = 0
+    oTable.TopMargin = 0
+    oTable.BottomMargin = 0
 
-    REM Position frame
-    oFrame.HoriOrient = com.sun.star.text.HoriOrientation.CENTER
-    oFrame.VertOrient = com.sun.star.text.VertOrientation.CENTER
-    oFrame.AnchorType = com.sun.star.text.TextContentAnchorType.AT_PAGE
+    REM Set column widths: 80% for Labels (left), 20% for Box/Bin (right)
+    REM After CW rotation: left→top (labels), right→bottom (box/bin)
+    Dim separators As Variant
+    separators = oTable.TableColumnSeparators
+    If UBound(separators) >= 0 Then
+        separators(0).Position = 8000   ' 80% for labels
+        oTable.TableColumnSeparators = separators
+    End If
 
-    REM Remove frame borders
+    REM Set row height - leave space for trailing paragraph
+    Dim oRows As Object
+    Dim oRow As Object
+    oRows = oTable.getRows()
+    oRow = oRows.getByIndex(0)
+    oRow.Height = usableHeight - 50
+    oRow.IsAutoHeight = False
+
+    REM Remove all borders from table cells
     Dim oNoBorder As New com.sun.star.table.BorderLine2
     oNoBorder.OuterLineWidth = 0
     oNoBorder.InnerLineWidth = 0
     oNoBorder.LineDistance = 0
     oNoBorder.LineWidth = 0
-    oFrame.TopBorder = oNoBorder
-    oFrame.BottomBorder = oNoBorder
-    oFrame.LeftBorder = oNoBorder
-    oFrame.RightBorder = oNoBorder
 
-    REM No padding inside frame
-    oFrame.TopMargin = 0
-    oFrame.BottomMargin = 0
-    oFrame.LeftMargin = 0
-    oFrame.RightMargin = 0
-
-    REM Insert frame into document
-    oText.insertTextContent(oCursor, oFrame, False)
-
-    REM Create table inside the frame (1 row, 2 columns)
-    Dim oFrameText As Object
-    Dim oFrameCursor As Object
-    oFrameText = oFrame.getText()
-    oFrameCursor = oFrameText.createTextCursor()
-    oFrameCursor.ParaTopMargin = 0
-    oFrameCursor.ParaBottomMargin = 0
-
-    oTable = oLabelDoc.createInstance("com.sun.star.text.TextTable")
-    oTable.initialize(1, 2)
-    oFrameText.insertTextContent(oFrameCursor, oTable, False)
-
-    REM Set table width to fill frame (50mm horizontal content)
-    oTable.Width = usableHeight     ' 49.8mm
-    oTable.HoriOrient = com.sun.star.text.HoriOrientation.NONE
-    oTable.LeftMargin = 0
-    oTable.RightMargin = 0
-
-    REM Set column widths: 12% for Box/Bin, 88% for labels
-    Dim separators As Variant
-    separators = oTable.TableColumnSeparators
-    If UBound(separators) >= 0 Then
-        separators(0).Position = 1200   ' 12% position
-        oTable.TableColumnSeparators = separators
-    End If
-
-    REM Set row height to fill frame (12mm vertical content)
-    Dim oRows As Object
-    Dim oRow As Object
-    oRows = oTable.getRows()
-    oRow = oRows.getByIndex(0)
-    oRow.Height = usableWidth       ' 11.8mm
-    oRow.IsAutoHeight = False
-
-    REM Remove all borders from table cells
     Dim oCellA1 As Object
     Dim oCellB1 As Object
     oCellA1 = oTable.getCellByName("A1")
@@ -507,7 +500,7 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
     oCellB1.LeftBorder = oNoBorder
     oCellB1.RightBorder = oNoBorder
 
-    REM === Left Cell: Box and Bin ===
+    REM === Left Cell (A1): Label Rows (will be at top after CW rotation) ===
     Dim oLeftText As Object
     Dim oLeftCursor As Object
     oLeftText = oCellA1.getText()
@@ -515,21 +508,32 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
 
     oCellA1.VertOrient = com.sun.star.text.VertOrientation.CENTER
 
-    REM Box text
-    oLeftCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.CENTER
+    REM Label row 1
+    oLeftCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
     oLeftCursor.ParaTopMargin = 0
     oLeftCursor.ParaBottomMargin = 0
-    oLeftCursor.CharHeight = fontBox
+    oLeftCursor.CharHeight = fontLabel1
     oLeftCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
-    oLeftText.insertString(oLeftCursor, label.Box, False)
-    oLeftText.insertControlCharacter(oLeftCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
+    oLeftText.insertString(oLeftCursor, label.Label1, False)
 
-    REM Bin text
-    oLeftCursor.CharHeight = fontBin
-    oLeftCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
-    oLeftText.insertString(oLeftCursor, label.Bin, False)
+    REM Label row 2 (if present)
+    If label.Label2 <> "" Then
+        oLeftText.insertControlCharacter(oLeftCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
+        oLeftCursor.CharHeight = fontLabel2
+        oLeftCursor.CharWeight = com.sun.star.awt.FontWeight.NORMAL
+        oLeftText.insertString(oLeftCursor, label.Label2, False)
+    End If
 
-    REM === Right Cell: Label Rows ===
+    REM Label row 3 (if present)
+    If label.Label3 <> "" Then
+        oLeftText.insertControlCharacter(oLeftCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
+        oLeftCursor.CharHeight = fontLabel3
+        oLeftText.insertString(oLeftCursor, label.Label3, False)
+    End If
+
+    REM === Right Cell (B1): Box and Bin ===
+    REM Order: Box first (top in landscape), then Bin (bottom in landscape)
+    REM When printed/viewed, Box appears on top, Bin below
     Dim oRightText As Object
     Dim oRightCursor As Object
     oRightText = oCellB1.getText()
@@ -537,44 +541,25 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
 
     oCellB1.VertOrient = com.sun.star.text.VertOrientation.CENTER
 
-    REM Label row 1
-    oRightCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
+    REM Box text first (on top)
+    oRightCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.CENTER
     oRightCursor.ParaTopMargin = 0
     oRightCursor.ParaBottomMargin = 0
-    oRightCursor.CharHeight = fontLabel1
-    oRightText.insertString(oRightCursor, label.Label1, False)
+    oRightCursor.CharHeight = fontBox
+    oRightCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
+    oRightText.insertString(oRightCursor, label.Box, False)
+    oRightText.insertControlCharacter(oRightCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
 
-    REM Label row 2 (if present)
-    If label.Label2 <> "" Then
-        oRightText.insertControlCharacter(oRightCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
-        oRightCursor.CharHeight = fontLabel2
-        oRightText.insertString(oRightCursor, label.Label2, False)
-    End If
+    REM Bin text (below Box)
+    oRightCursor.CharHeight = fontBin
+    oRightCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
+    oRightText.insertString(oRightCursor, label.Bin, False)
 
-    REM Label row 3 (if present)
-    If label.Label3 <> "" Then
-        oRightText.insertControlCharacter(oRightCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
-        oRightCursor.CharHeight = fontLabel3
-        oRightText.insertString(oRightCursor, label.Label3, False)
-    End If
-
-    REM Remove trailing paragraph after frame to prevent second page
-    Dim oEnum As Object
-    Dim oPara As Object
-    Dim oParaCursor As Object
-    oEnum = oText.createEnumeration()
-    Do While oEnum.hasMoreElements()
-        oPara = oEnum.nextElement()
-    Loop
-    REM oPara is now the last paragraph - minimize it to prevent page overflow
-    If Not IsNull(oPara) Then
-        If oPara.supportsService("com.sun.star.text.Paragraph") Then
-            oParaCursor = oPara.getText().createTextCursorByRange(oPara)
-            oParaCursor.CharHeight = 1
-            oParaCursor.ParaTopMargin = 0
-            oParaCursor.ParaBottomMargin = 0
-        End If
-    End If
+    REM Minimize trailing paragraph to prevent second page
+    oCursor.gotoEnd(False)
+    oCursor.CharHeight = 1
+    oCursor.ParaTopMargin = 0
+    oCursor.ParaBottomMargin = 0
 
     REM Print or dry-run
     If Not config.IsDryRun Then
@@ -598,17 +583,38 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
         REM Close the label document
         oLabelDoc.close(False)
     Else
-        REM Dry-run: Show preview of the label
-        REM Make the document visible
-        oLabelDoc.CurrentController.Frame.ContainerWindow.Visible = True
+        REM Dry-run: Export to PDF for preview
+        Dim exportURL As String
+        Dim pdfFilename As String
+        Dim pdfOpts(1) As New com.sun.star.beans.PropertyValue
 
-        REM Set zoom for better visibility (label is very small)
-        Dim oViewSettings As Object
-        oViewSettings = oLabelDoc.CurrentController.getViewSettings()
-        oViewSettings.ZoomValue = 80  ' 80% zoom for preview
+        REM Build filename from label data
+        pdfFilename = "label_" & label.Box & "_" & label.Bin & ".pdf"
+        REM Sanitize filename (replace invalid characters)
+        pdfFilename = Replace(pdfFilename, "/", "-")
+        pdfFilename = Replace(pdfFilename, "\", "-")
+        pdfFilename = Replace(pdfFilename, ":", "-")
+        pdfFilename = Replace(pdfFilename, " ", "_")
 
-        REM Leave preview document open for user to inspect
-        REM User must manually close the preview window
+        REM Build full export URL
+        If config.ExportPath <> "" Then
+            exportURL = config.ExportPath & pdfFilename
+        Else
+            REM Fallback: use temp directory
+            exportURL = "file:///tmp/" & pdfFilename
+        End If
+
+        REM PDF export filter
+        pdfOpts(0).Name = "FilterName"
+        pdfOpts(0).Value = "writer_pdf_Export"
+        pdfOpts(1).Name = "Overwrite"
+        pdfOpts(1).Value = True
+
+        REM Export to PDF
+        oLabelDoc.storeToURL(exportURL, pdfOpts())
+
+        REM Close the label document
+        oLabelDoc.close(False)
     End If
 
     PrintSingleLabel = True
@@ -642,7 +648,8 @@ Sub ShowConfig()
     msg = msg & Chr(10) & "Output Mode: " & config.OutputMode
 
     If config.IsDryRun Then
-        msg = msg & " (No printing)"
+        msg = msg & " (PDF export mode)"
+        msg = msg & Chr(10) & "Export Path: " & config.ExportPath
     Else
         msg = msg & " (Printing enabled)"
     End If
@@ -691,19 +698,19 @@ Sub InitializeConfigSheet()
     oSheet.getCellByPosition(1, 0).String = "Value"
 
     oSheet.getCellByPosition(0, CFG_ROW_FONT_BOX).String = "Font Size - Box"
-    oSheet.getCellByPosition(1, CFG_ROW_FONT_BOX).Value = 150
+    oSheet.getCellByPosition(1, CFG_ROW_FONT_BOX).Value = 14
 
     oSheet.getCellByPosition(0, CFG_ROW_FONT_BIN).String = "Font Size - Bin"
-    oSheet.getCellByPosition(1, CFG_ROW_FONT_BIN).Value = 150
+    oSheet.getCellByPosition(1, CFG_ROW_FONT_BIN).Value = 12
 
     oSheet.getCellByPosition(0, CFG_ROW_FONT_LABEL1).String = "Font Size - Label 1"
-    oSheet.getCellByPosition(1, CFG_ROW_FONT_LABEL1).Value = 120
+    oSheet.getCellByPosition(1, CFG_ROW_FONT_LABEL1).Value = 9
 
     oSheet.getCellByPosition(0, CFG_ROW_FONT_LABEL2).String = "Font Size - Label 2"
-    oSheet.getCellByPosition(1, CFG_ROW_FONT_LABEL2).Value = 80
+    oSheet.getCellByPosition(1, CFG_ROW_FONT_LABEL2).Value = 7
 
     oSheet.getCellByPosition(0, CFG_ROW_FONT_LABEL3).String = "Font Size - Label 3"
-    oSheet.getCellByPosition(1, CFG_ROW_FONT_LABEL3).Value = 60
+    oSheet.getCellByPosition(1, CFG_ROW_FONT_LABEL3).Value = 6
 
     oSheet.getCellByPosition(0, CFG_ROW_OUTPUT_MODE).String = "Output Mode"
     oSheet.getCellByPosition(1, CFG_ROW_OUTPUT_MODE).String = "DRY_RUN"
@@ -711,11 +718,15 @@ Sub InitializeConfigSheet()
     oSheet.getCellByPosition(0, CFG_ROW_SHOW_COMPLETE).String = "Show Complete Message"
     oSheet.getCellByPosition(1, CFG_ROW_SHOW_COMPLETE).String = "NO"
 
+    oSheet.getCellByPosition(0, CFG_ROW_EXPORT_PATH).String = "PDF Export Path"
+    oSheet.getCellByPosition(1, CFG_ROW_EXPORT_PATH).String = ""
+
     REM Add note about output mode
-    oSheet.getCellByPosition(0, 9).String = "Output Mode Options:"
-    oSheet.getCellByPosition(0, 10).String = "  PRINT - Send to printer"
-    oSheet.getCellByPosition(0, 11).String = "  DRY_RUN - Test without printing"
-    oSheet.getCellByPosition(0, 12).String = "Show Complete Message: YES or NO"
+    oSheet.getCellByPosition(0, 10).String = "Output Mode Options:"
+    oSheet.getCellByPosition(0, 11).String = "  PRINT - Send to printer"
+    oSheet.getCellByPosition(0, 12).String = "  DRY_RUN - Export PDF (no printing)"
+    oSheet.getCellByPosition(0, 13).String = "Show Complete Message: YES or NO"
+    oSheet.getCellByPosition(0, 14).String = "PDF Export Path: Leave empty for document folder"
 
     REM Format header row
     Dim oRange As Object
@@ -802,4 +813,136 @@ Sub DebugPreview()
 
 ErrorHandler:
     MsgBox "Error: " & Err & " - " & Error$, 16, "Debug Preview Error"
+End Sub
+
+REM ============================================================
+REM  Test Label - Simple test to understand printer behavior
+REM  Creates minimal document with just text, no table/frame
+REM ============================================================
+Sub TestLabel()
+    Dim oDesktop As Object
+    Dim oDoc As Object
+    Dim oText As Object
+    Dim oCursor As Object
+    Dim oPageStyles As Object
+    Dim oPageStyle As Object
+
+    oDesktop = CreateUnoService("com.sun.star.frame.Desktop")
+
+    REM Create visible document for testing
+    oDoc = oDesktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, Array())
+
+    oPageStyles = oDoc.StyleFamilies.getByName("PageStyles")
+    oPageStyle = oPageStyles.getByName("Standard")
+
+    REM Test 1: 50mm x 12mm (landscape-style, wide label)
+    oPageStyle.IsLandscape = False
+    oPageStyle.Width = 50000        ' 50mm
+    oPageStyle.Height = 12000       ' 12mm
+    oPageStyle.LeftMargin = 500
+    oPageStyle.RightMargin = 500
+    oPageStyle.TopMargin = 500
+    oPageStyle.BottomMargin = 500
+
+    REM Add simple test text
+    oText = oDoc.Text
+    oCursor = oText.createTextCursor()
+    oCursor.CharHeight = 8
+    oCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
+    oText.insertString(oCursor, "TEST ABC 123", False)
+
+    MsgBox "Test label created (50mm x 12mm)." & Chr(10) & Chr(10) & _
+           "1. Look at the preview - is text horizontal or vertical?" & Chr(10) & _
+           "2. Print it and compare to preview." & Chr(10) & _
+           "3. Close this document when done.", _
+           64, "Test Label"
+End Sub
+
+REM ============================================================
+REM  Test Label 2 - Portrait orientation (12mm x 50mm)
+REM ============================================================
+Sub TestLabel2()
+    Dim oDesktop As Object
+    Dim oDoc As Object
+    Dim oText As Object
+    Dim oCursor As Object
+    Dim oPageStyles As Object
+    Dim oPageStyle As Object
+
+    oDesktop = CreateUnoService("com.sun.star.frame.Desktop")
+
+    REM Create visible document for testing
+    oDoc = oDesktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, Array())
+
+    oPageStyles = oDoc.StyleFamilies.getByName("PageStyles")
+    oPageStyle = oPageStyles.getByName("Standard")
+
+    REM Test 2: 12mm x 50mm (portrait-style, tall label)
+    oPageStyle.IsLandscape = False
+    oPageStyle.Width = 12000        ' 12mm
+    oPageStyle.Height = 50000       ' 50mm
+    oPageStyle.LeftMargin = 500
+    oPageStyle.RightMargin = 500
+    oPageStyle.TopMargin = 500
+    oPageStyle.BottomMargin = 500
+
+    REM Add simple test text
+    oText = oDoc.Text
+    oCursor = oText.createTextCursor()
+    oCursor.CharHeight = 8
+    oCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
+    oText.insertString(oCursor, "TEST ABC 123", False)
+
+    MsgBox "Test label created (12mm x 50mm)." & Chr(10) & Chr(10) & _
+           "1. Look at the preview - is text horizontal or vertical?" & Chr(10) & _
+           "2. Print it and compare to preview." & Chr(10) & _
+           "3. Close this document when done.", _
+           64, "Test Label 2"
+End Sub
+
+REM ============================================================
+REM  Test Label 3 - Portrait page with rotated text (90° CCW)
+REM  Based on TestLabel2 findings - text needs rotation to be readable
+REM ============================================================
+Sub TestLabel3()
+    Dim oDesktop As Object
+    Dim oDoc As Object
+    Dim oText As Object
+    Dim oCursor As Object
+    Dim oPageStyles As Object
+    Dim oPageStyle As Object
+
+    oDesktop = CreateUnoService("com.sun.star.frame.Desktop")
+
+    REM Create visible document for testing
+    oDoc = oDesktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, Array())
+
+    oPageStyles = oDoc.StyleFamilies.getByName("PageStyles")
+    oPageStyle = oPageStyles.getByName("Standard")
+
+    REM Portrait page: 12mm x 50mm (matching TestLabel2)
+    oPageStyle.IsLandscape = False
+    oPageStyle.Width = 12000        ' 12mm
+    oPageStyle.Height = 50000       ' 50mm
+    oPageStyle.LeftMargin = 500
+    oPageStyle.RightMargin = 500
+    oPageStyle.TopMargin = 500
+    oPageStyle.BottomMargin = 500
+
+    REM Add test text with 90° CCW rotation
+    oText = oDoc.Text
+    oCursor = oText.createTextCursor()
+    oCursor.CharHeight = 8
+    oCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
+
+    REM CharRotation is in 1/10 degrees, 900 = 90° CCW
+    oCursor.CharRotation = 900
+
+    oText.insertString(oCursor, "TEST ABC 123", False)
+
+    MsgBox "Test label created (12mm x 50mm) with 90° CCW text rotation." & Chr(10) & Chr(10) & _
+           "1. Look at the preview - text should appear vertical in preview" & Chr(10) & _
+           "2. Print it - text should appear HORIZONTAL on the physical label" & Chr(10) & _
+           "3. Close this document when done.", _
+           64, "Test Label 3"
 End Sub
