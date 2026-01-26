@@ -1,14 +1,133 @@
-# LibreOffice temp/lock files
+# =============================================================================
+# KelderInventory - .gitignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# LibreOffice
+# -----------------------------------------------------------------------------
+# Lock files
 .~lock.*
+
+# Temporary files
+*~
+*.tmp
+
+# LibreOffice backup files
+*.bak
+
+# -----------------------------------------------------------------------------
+# Operating System Files
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# -----------------------------------------------------------------------------
+# IDE and Editor Files
+# -----------------------------------------------------------------------------
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*.swn
 *~
 
-# OS files
-.DS_Store
-Thumbs.db
+# Emacs
+*~
+\#*\#
+.#*
 
-# Backup files
+# -----------------------------------------------------------------------------
+# Python (for helper scripts)
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+
+# -----------------------------------------------------------------------------
+# Build and Output Files
+# -----------------------------------------------------------------------------
+# Generated PDFs (test outputs)
+label_*.pdf
+debug_*.pdf
+macro_test*.pdf
+
+# Generated images (test outputs)
+label_*-*.png
+debug_*-*.png
+macro_test*-*.png
+
+# Temporary print files
+/tmp/
+
+# -----------------------------------------------------------------------------
+# Local Configuration (sensitive)
+# -----------------------------------------------------------------------------
+# Samba/network share configuration
+samba-share.conf
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Credentials
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# -----------------------------------------------------------------------------
+# Backup and Archive Files
+# -----------------------------------------------------------------------------
 *.bak
 *.backup
+*.old
+*.orig
+*.save
 
-# Local configuration
-samba-share.conf
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+*.log
+logs/
