@@ -424,37 +424,39 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
 
     oLabelDoc = oDesktop.loadComponentFromURL("private:factory/swriter", "_blank", 0, loadProps())
 
-    REM Configure page size for label - LANDSCAPE orientation
-    REM Dymo 30334: 12mm x 50mm label
-    REM Landscape: 50mm wide x 12mm tall (readable orientation)
+    REM Configure page size for label - PORTRAIT orientation to match Dymo
+    REM Dymo 30334: 12mm x 50mm label (portrait feed)
+    REM Content is rotated 90° CCW so it reads correctly when label is rotated CW
     oPageStyles = oLabelDoc.StyleFamilies.getByName("PageStyles")
     oPageStyle = oPageStyles.getByName("Standard")
 
-    oPageStyle.IsLandscape = True
-    oPageStyle.Width = LABEL_WIDTH   ' 50mm (5000 in 1/100mm)
-    oPageStyle.Height = LABEL_HEIGHT ' 12mm (1200 in 1/100mm)
-    oPageStyle.LeftMargin = 30       ' ~0.3mm minimal margins
-    oPageStyle.RightMargin = 30
-    oPageStyle.TopMargin = 30
-    oPageStyle.BottomMargin = 30
+    oPageStyle.IsLandscape = False
+    oPageStyle.Width = LABEL_HEIGHT   ' 12mm (1200 in 1/100mm) - narrow
+    oPageStyle.Height = LABEL_WIDTH   ' 50mm (5000 in 1/100mm) - long
+    oPageStyle.LeftMargin = 0
+    oPageStyle.RightMargin = 0
+    oPageStyle.TopMargin = 0
+    oPageStyle.BottomMargin = 0
 
-    REM Calculate usable dimensions (landscape: 50mm wide x 12mm tall)
+    REM Usable dimensions in portrait: 12mm wide x 50mm tall
     Dim usableWidth As Long
     Dim usableHeight As Long
-    usableWidth = LABEL_WIDTH - 60   ' ~49.4mm
-    usableHeight = LABEL_HEIGHT - 60 ' ~11.4mm
+    usableWidth = LABEL_HEIGHT        ' 12mm
+    usableHeight = LABEL_WIDTH        ' 50mm
 
-    REM Create table directly in the document (no frame needed for landscape)
+    REM Create document content with rotated text (90° CCW = 900 tenths of degree)
+    REM Layout: Box/Bin at bottom of page (right side when rotated), Labels at top (left side when rotated)
     oText = oLabelDoc.Text
     oCursor = oText.createTextCursor()
     oCursor.ParaTopMargin = 0
     oCursor.ParaBottomMargin = 0
 
+    REM Create table with 2 rows: Labels (top, 80%), Box/Bin (bottom, 20%)
     oTable = oLabelDoc.createInstance("com.sun.star.text.TextTable")
-    oTable.initialize(1, 2)
+    oTable.initialize(2, 1)           ' 2 rows, 1 column
     oText.insertTextContent(oCursor, oTable, False)
 
-    REM Set table to fill page width
+    REM Set table dimensions
     oTable.Width = usableWidth
     oTable.HoriOrient = com.sun.star.text.HoriOrientation.NONE
     oTable.LeftMargin = 0
@@ -462,24 +464,21 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
     oTable.TopMargin = 0
     oTable.BottomMargin = 0
 
-    REM Set column widths: 80% for Labels (left), 20% for Box/Bin (right)
-    REM After CW rotation: left→top (labels), right→bottom (box/bin)
-    Dim separators As Variant
-    separators = oTable.TableColumnSeparators
-    If UBound(separators) >= 0 Then
-        separators(0).Position = 8000   ' 80% for labels
-        oTable.TableColumnSeparators = separators
-    End If
-
-    REM Set row height - leave space for trailing paragraph
+    REM Set row heights: 80% for Labels, 20% for Box/Bin (leave room for trailing para)
     Dim oRows As Object
-    Dim oRow As Object
+    Dim oRow1 As Object
+    Dim oRow2 As Object
     oRows = oTable.getRows()
-    oRow = oRows.getByIndex(0)
-    oRow.Height = usableHeight - 50
-    oRow.IsAutoHeight = False
+    oRow1 = oRows.getByIndex(0)       ' Labels
+    oRow2 = oRows.getByIndex(1)       ' Box/Bin
 
-    REM Remove all borders from table cells
+    REM Total should be less than usableHeight to prevent page overflow
+    oRow1.Height = usableHeight * 0.78   ' ~39mm for labels
+    oRow1.IsAutoHeight = False
+    oRow2.Height = usableHeight * 0.18   ' ~9mm for box/bin
+    oRow2.IsAutoHeight = False
+
+    REM Remove all borders
     Dim oNoBorder As New com.sun.star.table.BorderLine2
     oNoBorder.OuterLineWidth = 0
     oNoBorder.InnerLineWidth = 0
@@ -487,73 +486,78 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
     oNoBorder.LineWidth = 0
 
     Dim oCellA1 As Object
-    Dim oCellB1 As Object
-    oCellA1 = oTable.getCellByName("A1")
-    oCellB1 = oTable.getCellByName("B1")
+    Dim oCellA2 As Object
+    oCellA1 = oTable.getCellByName("A1")  ' Labels (top = left after rotation)
+    oCellA2 = oTable.getCellByName("A2")  ' Box/Bin (bottom = right after rotation)
 
     oCellA1.TopBorder = oNoBorder
     oCellA1.BottomBorder = oNoBorder
     oCellA1.LeftBorder = oNoBorder
     oCellA1.RightBorder = oNoBorder
-    oCellB1.TopBorder = oNoBorder
-    oCellB1.BottomBorder = oNoBorder
-    oCellB1.LeftBorder = oNoBorder
-    oCellB1.RightBorder = oNoBorder
+    oCellA2.TopBorder = oNoBorder
+    oCellA2.BottomBorder = oNoBorder
+    oCellA2.LeftBorder = oNoBorder
+    oCellA2.RightBorder = oNoBorder
 
-    REM === Left Cell (A1): Label Rows (will be at top after CW rotation) ===
-    Dim oLeftText As Object
-    Dim oLeftCursor As Object
-    oLeftText = oCellA1.getText()
-    oLeftCursor = oLeftText.createTextCursor()
+    REM === Top Cell (A1): Label Rows - text rotated 90° CCW ===
+    REM VertOrient.BOTTOM positions text at bottom of cell, which becomes right side
+    REM after 90° CW rotation (closer to Box/Bin section)
+    Dim oTopText As Object
+    Dim oTopCursor As Object
+    oTopText = oCellA1.getText()
+    oTopCursor = oTopText.createTextCursor()
 
-    oCellA1.VertOrient = com.sun.star.text.VertOrientation.CENTER
+    oCellA1.VertOrient = com.sun.star.text.VertOrientation.BOTTOM
 
-    REM Label row 1
-    oLeftCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
-    oLeftCursor.ParaTopMargin = 0
-    oLeftCursor.ParaBottomMargin = 0
-    oLeftCursor.CharHeight = fontLabel1
-    oLeftCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
-    oLeftText.insertString(oLeftCursor, label.Label1, False)
+    REM Label row 1 (rotated text)
+    oTopCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
+    oTopCursor.ParaTopMargin = 0
+    oTopCursor.ParaBottomMargin = 0
+    oTopCursor.CharRotation = 900     ' 90° counter-clockwise
+    oTopCursor.CharHeight = fontLabel1
+    oTopCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
+    oTopText.insertString(oTopCursor, label.Label1, False)
 
     REM Label row 2 (if present)
     If label.Label2 <> "" Then
-        oLeftText.insertControlCharacter(oLeftCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
-        oLeftCursor.CharHeight = fontLabel2
-        oLeftCursor.CharWeight = com.sun.star.awt.FontWeight.NORMAL
-        oLeftText.insertString(oLeftCursor, label.Label2, False)
+        oTopText.insertControlCharacter(oTopCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
+        oTopCursor.CharRotation = 900
+        oTopCursor.CharHeight = fontLabel2
+        oTopCursor.CharWeight = com.sun.star.awt.FontWeight.NORMAL
+        oTopText.insertString(oTopCursor, label.Label2, False)
     End If
 
     REM Label row 3 (if present)
     If label.Label3 <> "" Then
-        oLeftText.insertControlCharacter(oLeftCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
-        oLeftCursor.CharHeight = fontLabel3
-        oLeftText.insertString(oLeftCursor, label.Label3, False)
+        oTopText.insertControlCharacter(oTopCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
+        oTopCursor.CharRotation = 900
+        oTopCursor.CharHeight = fontLabel3
+        oTopText.insertString(oTopCursor, label.Label3, False)
     End If
 
-    REM === Right Cell (B1): Box and Bin ===
-    REM Order: Box first (top in landscape), then Bin (bottom in landscape)
-    REM When printed/viewed, Box appears on top, Bin below
-    Dim oRightText As Object
-    Dim oRightCursor As Object
-    oRightText = oCellB1.getText()
-    oRightCursor = oRightText.createTextCursor()
+    REM === Bottom Cell (A2): Box and Bin - text rotated 90° CCW ===
+    Dim oBottomText As Object
+    Dim oBottomCursor As Object
+    oBottomText = oCellA2.getText()
+    oBottomCursor = oBottomText.createTextCursor()
 
-    oCellB1.VertOrient = com.sun.star.text.VertOrientation.CENTER
+    oCellA2.VertOrient = com.sun.star.text.VertOrientation.CENTER
 
-    REM Box text first (on top)
-    oRightCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.CENTER
-    oRightCursor.ParaTopMargin = 0
-    oRightCursor.ParaBottomMargin = 0
-    oRightCursor.CharHeight = fontBox
-    oRightCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
-    oRightText.insertString(oRightCursor, label.Box, False)
-    oRightText.insertControlCharacter(oRightCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
+    REM Box and Bin (rotated text)
+    oBottomCursor.ParaAdjust = com.sun.star.style.ParagraphAdjust.CENTER
+    oBottomCursor.ParaTopMargin = 0
+    oBottomCursor.ParaBottomMargin = 0
+    oBottomCursor.CharRotation = 900  ' 90° counter-clockwise
+    oBottomCursor.CharHeight = fontBox
+    oBottomCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
+    oBottomText.insertString(oBottomCursor, label.Box, False)
+    oBottomText.insertControlCharacter(oBottomCursor, com.sun.star.text.ControlCharacter.LINE_BREAK, False)
 
-    REM Bin text (below Box)
-    oRightCursor.CharHeight = fontBin
-    oRightCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
-    oRightText.insertString(oRightCursor, label.Bin, False)
+    REM Bin text
+    oBottomCursor.CharRotation = 900
+    oBottomCursor.CharHeight = fontBin
+    oBottomCursor.CharWeight = com.sun.star.awt.FontWeight.BOLD
+    oBottomText.insertString(oBottomCursor, label.Bin, False)
 
     REM Minimize trailing paragraph to prevent second page
     oCursor.gotoEnd(False)
@@ -568,16 +572,12 @@ Function PrintSingleLabel(label As LabelData, config As LabelConfig) As Boolean
         printOpts(0).Value = PRINTER_NAME
         oLabelDoc.Printer = printOpts()
 
-        REM Print with options to ensure correct output
-        Dim printJobOpts(3) As New com.sun.star.beans.PropertyValue
+        REM Print with Wait option
+        Dim printJobOpts(1) As New com.sun.star.beans.PropertyValue
         printJobOpts(0).Name = "Wait"
         printJobOpts(0).Value = True
         printJobOpts(1).Name = "Pages"
-        printJobOpts(1).Value = "1"          ' Only print first page
-        printJobOpts(2).Name = "PrintContent"
-        printJobOpts(2).Value = 0            ' Print all content
-        printJobOpts(3).Name = "SinglePrintJobs"
-        printJobOpts(3).Value = True
+        printJobOpts(1).Value = "1"
         oLabelDoc.print(printJobOpts())
 
         REM Close the label document

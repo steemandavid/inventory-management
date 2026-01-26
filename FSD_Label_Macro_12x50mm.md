@@ -19,6 +19,8 @@ This document describes the functional specifications for a macro-based system t
 
 The system allows users to select one or more rows in the worksheet and generate consistently formatted labels by clicking a button, with layout and behavior controlled through a dedicated configuration worksheet.
 
+This macro should run in LibreOffice Calc in both Windows and Linux without installing additional tools.
+
 ---
 
 ## 2. System Overview
