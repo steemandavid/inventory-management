@@ -1,0 +1,23 @@
+[Unit]
+Description=KelderInventory print agent (polls steeman.be/inventory, prints on the Dymo)
+After=network-online.target cups.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=invagent
+Group=invagent
+ExecStart=/usr/bin/python3 /opt/inventory-agent/print_agent.py
+Restart=always
+RestartSec=10
+# hardening: the agent only needs the network, CUPS and its own config
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ReadOnlyPaths=/etc/inventory-agent
+
+[Install]
+WantedBy=multi-user.target

@@ -10,7 +10,7 @@
 # Never uploaded unless asked: config.php, setup.php, setup-seed.json. lftp mirror hangs on
 # this hosting, so files go one by one with curl.
 set -euo pipefail
-cd "$(dirname "$0")/../web"
+here="$(cd "$(dirname "$0")" && pwd)"
 
 FTP="ftp://ftp.steeman.be/inventory"
 SITE="https://www.steeman.be/inventory"
@@ -20,12 +20,13 @@ check_only=0; config=""; setup=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --check) check_only=1 ;;
-    --config) config="$2"; shift ;;
+    --config) config="$(realpath "$2")"; shift ;;
     --setup) setup=1 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
   shift
 done
+cd "$here/../web"
 
 upload() {  # local path relative to web/, remote path relative to /inventory/
   local code
