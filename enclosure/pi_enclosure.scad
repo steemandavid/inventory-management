@@ -43,10 +43,10 @@ r_back    = 5;      // corner radius at the back: kept small so the back wall is
 
 insert_d   = 3.2;   // hole for the M2.5 heat-set insert (3.5 mm OD x 3 mm): ~0.3 under the OD, check with insert_test.stl
 insert_len = 3.0;   // insert length
-insert_hole_depth = 4.5;   // deeper than the insert: an M2.5 x 5 screw reaches ~4.2 mm into a screw post
-screw_d    = 2.9;   // clearance hole M2.5 in the base
-head_d     = 5.6;   // counterbore for the Phillips pan head
-head_h     = 2.2;   // counterbore depth (pan head ~1.8 mm)
+insert_hole_depth = 4.5;   // deeper than the insert: an M2.5 x 5 screw reaches ~3 mm into a screw post
+screw_d    = 2.7;   // clearance hole M2.5 in the base (2.9 printed too large: the screw head fell through)
+head_d     = 3.4;   // counterbore for the Phillips head (David: 3.4 mm wide, 1 mm deep)
+head_h     = 1.0;   // counterbore depth: the head sits flush with the underside of the base
 
 /* ---------- construction ---------- */
 wall        = 2.4;  // back wall, side walls and front of the cover
@@ -179,8 +179,6 @@ module base() {
         for (p = pi_holes) translate(concat(pi_pt(p), [base_t + standoff_h - insert_hole_depth])) cylinder(d = insert_d, h = insert_hole_depth + eps);
         // vent slots in the base under the Pi
         for (x = [pi_x0 + 12 : 5 : pi_x0 + pi_w - 12]) translate([x, pi_y0 + 16, -eps]) cube([2, pi_l - 36, base_t + 2 * eps]);
-        // recesses for stick-on rubber feet (10 mm), away from the screw heads
-        for (p = [[26, 30], [outer_w - 26, 30], [22, outer_d - 22], [outer_w - 22, outer_d - 26]]) translate([p[0], p[1], -eps]) cylinder(d = 10.6, h = 1);
     }
 }
 

@@ -63,13 +63,14 @@ Both parts print without supports. PLA or PETG, 0.2 mm layers, 3 walls, 15 % inf
 
 1. Press 5 M2.5 heat-set inserts (3.5 mm OD x 3 mm) into the screw posts of the cover and 4 into the Pi
    standoffs of the base, flush with the surface. The holes are 4.5 mm deep: an M2.5 x 5 screw reaches
-   ~4.2 mm in, past the 3 mm insert.
+   ~3 mm into a screw post, the full length of the insert.
 2. Screw the Pi onto the Pi standoffs (M2.5 x 5), ports towards the back.
 3. Push the power cable through the power hole from outside and plug it into the Pi.
 4. Lower the cover over the base (the port openings are open at the bottom, so it slides over the ports;
    the port fillers close them below the ports) and screw it on from below with 5 x M2.5 x 5. The heads sink
-   into the counterbores in the base.
-5. Optional: 4 rubber feet (10 mm) in the recesses under the base. Put the Dymo on the top panel.
+   into the counterbores in the base (3.4 mm wide, 1 mm deep, screw holes 2.7 mm).
+5. Put the Dymo on the top panel. Stick-on rubber feet can go anywhere under the base (there are no
+   recesses for them: those didn't print well).
 
 ## Notes
 

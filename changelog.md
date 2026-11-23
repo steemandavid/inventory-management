@@ -131,3 +131,39 @@ Committed as `9d37d2d`.
   the first 8 to 10 mm of `cover.stl` to check the port openings before the full print.
 - The back corners have a 5 mm radius (Dymo ~20 mm) so the back wall is straight at the ports.
 - Not printed yet; insert hole size still to be confirmed with the coupon.
+
+## 2026-11-23 — Real labels (on hold), SQL backups, enclosure base fix
+
+### 1. Real labels from `KelderInventory.ods` (on hold)
+David asked to replace the 6 sample labels with the real ones from `/storage/fileshare/KelderInventory.ods`.
+Dry run on dev (Admin → Backups → Restore with the .ods): 43 items, 81 empty bins (Box/Bin only) skipped.
+Open questions sent to David before the live import: 09/42 to 09/48 used twice with different contents,
+02/02 to 06/06 are the old sample texts, 01/01 twice (box-level labels?), column H "To be ordered" (Yes on
+09/40 and 09/41) has no field in the app, empty bins, typos "Fastners" / "Tozx". **David postponed the import
+until he has checked the sheet.** Live database untouched. Plan: cleaned .ods, re-test on dev, David restores
+it via Admin → Backups → Restore (REPLACE); a pre-restore backup is made automatically.
+
+### 2. Database file in every backup set (v2.2)
+| What | Where |
+|---|---|
+| `write_sql()` | `web/lib/backup.php`: `SHOW CREATE TABLE` + INSERTs (100 rows per statement, `PDO::quote`); DROP + CREATE for `BACKUP_TABLES`, `CREATE TABLE IF NOT EXISTS` only for the credential tables; ends with `-- end of backup` |
+| Set files | `BACKUP_EXTS = ods, json, sql`: listing, retention, download (`application/sql`), agent `backup` action |
+| Pi | `agent/backup_fetch.py`: sql optional (old sets stay valid), checked for completeness and item count; retention removes .sql too |
+| Tests | 135/135: dump downloads, has no credentials, loads into a scratch DB with identical checksums (except `last_backup_*`, saved after the dump), Pi verify rejects a truncated dump |
+| Deploy | `tools/deploy.sh` to LWS, all checks passed; `_backups/*.sql` returns 403 |
+
+The path to john-ai and offsite didn't change: `pull-backups.sh` rsyncs every file, Borg and the offsite sync
+pick it up. Restore: `mysql --default-character-set=utf8mb4 <database> < inventory_....sql`.
+
+**Pi update:** `agent/install.sh` doesn't work from Claude Code's `!` prompt (no tty, sudo can't ask the
+password): David ran it from his own terminal. Not verified yet, because David then powered the Pi off
+(`sudo poweroff`) to build it into the enclosure. **Check when it is back:** printer online in Admin, and
+`/opt/inventory-agent/backup_fetch.py` contains `EXTS`. Until the Pi has the new version, it would reject
+sets with a .sql (the Sunday 04:00 job would then retry hourly for 24 h and fail).
+
+### 3. Enclosure base
+Screw heads fell through the base. `screw_d` 2.9 → 2.7, counterbore `head_d` 5.6 → 3.4, `head_h` 2.2 → 1.0
+(David's numbers), rubber feet recesses removed. Only `base.stl` changed (verified by slicing: 5 holes,
+3.4 mm up to 1 mm, 2.7 mm above, no recesses). The screw now reaches ~3 mm into a screw post (the insert's
+length). If the heads don't fit, try `head_d` 3.6. Copied to `J:\pi-enclosure\`. David is waiting for the
+3D printer.

@@ -2,7 +2,8 @@
 declare(strict_types=1);
 /*
  * Backups (FSD §10): a backup set is inventory_YYYY-MM-DD_HHMM.ods (human readable, same
- * columns as the old spreadsheet + Config sheet) and .json (exact restore). Sets are kept
+ * columns as the old spreadsheet + Config sheet), .json (exact restore in the app) and .sql
+ * (MariaDB dump of the inv_* tables, restorable with the mysql client). Sets are kept
  * in _backups/ (blocked by .htaccess) with retention: the 10 newest sets, plus the first
  * set of every calendar month forever.
  */
@@ -10,6 +11,7 @@ declare(strict_types=1);
 const BACKUP_SCHEMA = 1;
 const BACKUP_KEEP_RECENT = 10;
 const BACKUP_TABLES = ['inv_items', 'inv_settings', 'inv_audit', 'inv_print_jobs'];
+const BACKUP_EXTS = ['ods', 'json', 'sql'];
 const ODS_COLUMNS = ['box' => 'Box', 'bin' => 'Bin', 'label1' => 'Label row 1', 'label2' => 'Label row 2',
                      'label3' => 'Label row 3', 'keywords' => 'Keywords', 'comments' => 'Comments'];
 
@@ -86,6 +88,51 @@ function write_ods(string $path, array $data): void
     }
 }
 
+function sql_value(mixed $v): string
+{
+    return $v === null ? 'NULL' : db()->quote((string) $v);
+}
+
+/**
+ * MariaDB dump of all inv_* tables (FSD §10.1). BACKUP_TABLES get DROP + CREATE + data. The
+ * other inv_* tables (admin password, sessions, agent token, rate data) only get
+ * CREATE TABLE IF NOT EXISTS: no credentials in backups, and loading the dump into an existing
+ * installation keeps its password and agent token. Never touches verba's tables.
+ */
+function write_sql(string $path, array $data): void
+{
+    $pdo = db();
+    $out = "-- Inventory management database backup\n"
+        . '-- created ' . $data['created_at'] . ', app ' . APP_VERSION . "\n"
+        . "-- Restore: mysql --default-character-set=utf8mb4 <database> < this-file.sql\n"
+        . "-- Data of inv_admin, inv_sessions, inv_login_attempts, inv_rate and inv_agent is not included.\n\n"
+        . "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n\n";
+    $tables = $pdo->query("SHOW TABLES LIKE 'inv\\_%'")->fetchAll(PDO::FETCH_COLUMN);
+    sort($tables);
+    foreach ($tables as $t) {
+        if (!preg_match('/^inv_[a-z_]+$/', $t)) {
+            continue;
+        }
+        $create = $pdo->query("SHOW CREATE TABLE `$t`")->fetch(PDO::FETCH_NUM)[1];
+        if (!in_array($t, BACKUP_TABLES, true)) {
+            $out .= preg_replace('/^CREATE TABLE/', 'CREATE TABLE IF NOT EXISTS', $create) . ";\n\n";
+            continue;
+        }
+        $out .= "DROP TABLE IF EXISTS `$t`;\n$create;\n";
+        $rows = $data['tables'][$t];
+        foreach (array_chunk($rows, 100) as $chunk) {
+            $cols = '`' . implode('`, `', array_keys($chunk[0])) . '`';
+            $vals = array_map(fn ($r) => '(' . implode(', ', array_map('sql_value', array_values($r))) . ')', $chunk);
+            $out .= "INSERT INTO `$t` ($cols) VALUES\n" . implode(",\n", $vals) . ";\n";
+        }
+        $out .= "\n";
+    }
+    $out .= "SET FOREIGN_KEY_CHECKS = 1;\n-- end of backup\n";
+    if (file_put_contents("$path.tmp", $out) !== strlen($out) || !rename("$path.tmp", $path)) {
+        throw new RuntimeException('cannot write ' . basename($path));
+    }
+}
+
 /** Make a backup set now. Returns its base name (inventory_YYYY-MM-DD_HHMM[_suffix]). */
 function make_backup(string $suffix = ''): string
 {
@@ -101,18 +148,19 @@ function make_backup(string $suffix = ''): string
         throw new RuntimeException("cannot write $base.json");
     }
     write_ods("$dir/$base.ods", $data);
+    write_sql("$dir/$base.sql", $data);
     save_setting('last_backup_at', now());
     apply_retention();
     return $base;
 }
 
-/** Existing backup sets, newest first: [base => ['ods' => bool, 'json' => bool, 'date' => 'Y-m-d H:i']]. */
+/** Existing backup sets, newest first: [base => ['ods' => bool, 'json' => bool, 'sql' => bool, 'date' => 'Y-m-d H:i']]. */
 function list_backups(): array
 {
     $sets = [];
-    foreach (glob(backup_dir() . '/inventory_*.{ods,json}', GLOB_BRACE) ?: [] as $f) {
-        if (preg_match('/^(inventory_(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(?:_[a-z0-9-]+)?)\.(ods|json)$/', basename($f), $m)) {
-            $sets[$m[1]] ??= ['ods' => false, 'json' => false, 'date' => "$m[2] $m[3]:$m[4]"];
+    foreach (glob(backup_dir() . '/inventory_*.{ods,json,sql}', GLOB_BRACE) ?: [] as $f) {
+        if (preg_match('/^(inventory_(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(?:_[a-z0-9-]+)?)\.(ods|json|sql)$/', basename($f), $m)) {
+            $sets[$m[1]] ??= ['ods' => false, 'json' => false, 'sql' => false, 'date' => "$m[2] $m[3]:$m[4]"];
             $sets[$m[1]][$m[5]] = true;
         }
     }
@@ -141,7 +189,7 @@ function apply_retention(): void
     $keep = backups_to_keep(array_map(fn ($s) => $s['date'], $sets));
     foreach (array_keys($sets) as $base) {
         if (!in_array($base, $keep, true)) {
-            foreach (['ods', 'json'] as $ext) {
+            foreach (BACKUP_EXTS as $ext) {
                 @unlink(backup_dir() . "/$base.$ext");
             }
         }
@@ -151,7 +199,7 @@ function apply_retention(): void
 /** Path of a backup file if the name is valid and it exists, else null (no path traversal). */
 function backup_file(string $name): ?string
 {
-    if (!preg_match('/^inventory_\d{4}-\d{2}-\d{2}_\d{4}(?:_[a-z0-9-]+)?\.(ods|json)$/', $name)) {
+    if (!preg_match('/^inventory_\d{4}-\d{2}-\d{2}_\d{4}(?:_[a-z0-9-]+)?\.(ods|json|sql)$/', $name)) {
         return null;
     }
     $path = backup_dir() . '/' . $name;

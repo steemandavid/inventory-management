@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-11-23
+
+### Added
+- Every backup set also has an `.sql` file: a MariaDB dump of the `inv_*` tables (items, settings, history,
+  print jobs; structure only for admin, sessions, login attempts, rate and agent, so no credentials). It goes
+  along the existing path: LWS, the Pi, john-ai, Borg, offsite. The Pi checks that the dump is complete and
+  has the same item count; older sets without `.sql` stay valid. Download in Admin, Backups.
+
+### Changed
+- Enclosure base: screw holes 2.7 mm (were 2.9: the screw heads fell through), counterbores 3.4 mm wide and
+  1 mm deep (were 5.6 x 2.2), rubber feet recesses removed (didn't print well).
+
 ## [2.0.0] - 2026-11-23
 
 ### Added

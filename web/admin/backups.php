@@ -15,8 +15,8 @@ if (isset($_GET['download'])) {
         http_response_code(404);
         exit('Backup not found.');
     }
-    $ods = str_ends_with($path, '.ods');
-    header('Content-Type: ' . ($ods ? 'application/vnd.oasis.opendocument.spreadsheet' : 'application/json'));
+    $types = ['ods' => 'application/vnd.oasis.opendocument.spreadsheet', 'json' => 'application/json', 'sql' => 'application/sql'];
+    header('Content-Type: ' . $types[pathinfo($path, PATHINFO_EXTENSION)]);
     header('Content-Disposition: attachment; filename="' . basename($path) . '"');
     header('Content-Length: ' . filesize($path));
     readfile($path);
@@ -69,7 +69,7 @@ echo '<form method="post">', csrf_field(), '<input type="hidden" name="action" v
 echo '<table class="audit"><thead><tr><th>Date</th><th>Files</th></tr></thead><tbody>';
 foreach ($sets as $base => $set) {
     echo '<tr><td>', h($set['date']), str_contains($base, '_manual') ? ' (manual)' : '', str_contains($base, '_pre-restore') ? ' (before restore)' : '', '</td><td>';
-    foreach (['ods' => 'spreadsheet', 'json' => 'full restore'] as $ext => $label) {
+    foreach (['ods' => 'spreadsheet', 'json' => 'full restore', 'sql' => 'database dump'] as $ext => $label) {
         if ($set[$ext]) {
             echo '<div><a href="', h(url("admin/backups.php?download=$base.$ext")), '">', h("$base.$ext"), '</a> <span class="meta">(', $label, ')</span></div>';
         }

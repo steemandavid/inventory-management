@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  *   POST ?action=poll    body: {"version": "...", "printer": "..."}  -> {"jobs": [...]}
  *   POST ?action=report  body: {"id": 1, "claim": "...", "status": "printed"|"failed", "error": "..."}
- *   POST ?action=backup  -> {"base": "...", "items": n, "files": {"name.ods": base64, "name.json": base64}}
+ *   POST ?action=backup  -> {"base": "...", "items": n, "files": {"name.ods": base64, "name.json": base64, "name.sql": base64}}
  */
 require dirname(__DIR__) . '/lib/bootstrap.php';
 require dirname(__DIR__) . '/lib/items.php';
@@ -81,7 +81,7 @@ switch ($_GET['action'] ?? '') {
         $base = make_backup();
         save_setting('last_backup_fetched_at', now());
         $files = [];
-        foreach (['ods', 'json'] as $ext) {
+        foreach (BACKUP_EXTS as $ext) {
             $files["$base.$ext"] = base64_encode((string) file_get_contents(backup_dir() . "/$base.$ext"));
         }
         $count = (int) $pdo->query('SELECT COUNT(*) FROM inv_items')->fetchColumn();

@@ -79,17 +79,20 @@ Admin → Settings and sent with every print job.
 | 3 | john-ai `/home/john/backups/inventory/` → Borg System repo → offsite Pi | everything ever pulled |
 
 Each set is `inventory_YYYY-MM-DD_HHMM.ods` (opens in LibreOffice/Excel, old spreadsheet columns + Config sheet)
-and `.json` (exact restore). If the newest set is older than 8 days, or the nightly pull fails for 2 days,
+`.json` (exact restore in the app) and `.sql` (MariaDB dump of the `inv_*` tables, without the password, sessions
+or agent token). If the newest set is older than 8 days, or the nightly pull fails for 2 days,
 `/usr/local/bin/inventory-backup-check` (cron 07:00) adds a warning to the Monday backup summary email.
 
 **Restore:** Admin → Backups → Restore: upload a `.json` (items + label settings) or an `.ods` in the old
 spreadsheet layout. A backup of the current state is made first.
+Database restore without the app: `mysql --default-character-set=utf8mb4 <database> < inventory_....sql`. It
+replaces the items, settings, history and print jobs and keeps the existing password and agent token.
 
 ### Development and tests
 
 ```bash
 docker compose -f dev/compose.yaml up -d --build   # local LWS look-alike (DB is in tmpfs)
-python3 tests/test_web.py      # 128 HTTP tests; resets the dev database
+python3 tests/test_web.py      # 135 HTTP tests; resets the dev database
 python3 tests/test_retention.py  # server and Pi retention rules agree
 ```
 

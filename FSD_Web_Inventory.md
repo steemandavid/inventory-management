@@ -406,6 +406,7 @@ Every week, a backup set with:
 |------|---------|---------|
 | `inventory_YYYY-MM-DD.ods` | All items, same columns as the current spreadsheet (Box, Bin, Label row 1 to 3, Keywords, Comments) + a Config sheet with the label settings | Human-readable, opens in LibreOffice/Excel |
 | `inventory_YYYY-MM-DD.json` | All `inv_*` tables except sessions/login attempts/agent token, with a schema version | Exact, complete restore |
+| `inventory_YYYY-MM-DD.sql` | MariaDB dump (added in v2.2): DROP + CREATE + INSERT for items, settings, audit and print jobs; only `CREATE TABLE IF NOT EXISTS` for admin, sessions, login attempts, rate and agent (no credentials) | Database restore with the `mysql` client, independent of the app |
 
 The `.ods` is generated in PHP (ODS is a zip with XML files; needs `ZipArchive`, checked in
 Phase 1). Fallback if `ZipArchive` is missing: flat ODS (`.fods`, a single XML file that

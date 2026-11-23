@@ -254,8 +254,32 @@ def main():
                    allow_redirects=False)
     check("back up now", r.status_code == 303)
     page = admin.get(f"{BASE}/admin/backups.php").text
-    names = re.findall(r"download=(inventory_[\w-]+\.(?:ods|json))", page)
-    check("backup set listed (ods + json)", len(names) == 2 and "(manual)" in page, names)
+    names = re.findall(r"download=(inventory_[\w-]+\.(?:ods|json|sql))", page)
+    check("backup set listed (ods + json + sql)", len(names) == 3 and "(manual)" in page, names)
+    sql_name = [n for n in names if n.endswith(".sql")][0]
+    r = admin.get(f"{BASE}/admin/backups.php", params={"download": sql_name})
+    dump = r.content
+    check("download sql", r.status_code == 200 and "application/sql" in r.headers.get("content-type", "")
+          and dump.rstrip().endswith(b"-- end of backup"))
+    check("sql dump has no credentials", b"password_hash" in dump and b"$argon2" not in dump
+          and b"INSERT INTO `inv_admin`" not in dump and b"INSERT INTO `inv_agent`" not in dump
+          and b"INSERT INTO `inv_sessions`" not in dump)
+    check("sql dump keeps other tables", b"CREATE TABLE IF NOT EXISTS `inv_admin`" in dump
+          and b"DROP TABLE IF EXISTS `inv_admin`" not in dump and b"DROP TABLE IF EXISTS `inv_items`" in dump)
+    # load the dump into a scratch database and compare with the live tables
+    root = ["docker", "compose", "-f", COMPOSE, "exec", "-T", "db", "mariadb", "-uroot", "-pdevroot"]
+    subprocess.run(root + ["-e", "DROP DATABASE IF EXISTS restoretest; CREATE DATABASE restoretest"], check=True, capture_output=True)
+    loaded = subprocess.run(root + ["--default-character-set=utf8mb4", "restoretest"], input=dump, capture_output=True)
+    check("sql dump loads into MariaDB", loaded.returncode == 0, loaded.stderr[:300])
+    def checksum(db):
+        # last_backup_* is saved after the dump is written, so it differs by design
+        q = (f"CHECKSUM TABLE {db}.inv_items, {db}.inv_audit, {db}.inv_print_jobs; "
+             f"SELECT MD5(GROUP_CONCAT(name, '=', value ORDER BY name)) FROM {db}.inv_settings WHERE name NOT LIKE 'last\\_backup%'")
+        out = subprocess.run(root + ["-N", "-e", q], capture_output=True, text=True, check=True).stdout
+        return [line.split("\t")[-1] for line in out.strip().splitlines()]
+    check("restored sql identical to live data", checksum("restoretest") == checksum("inventory"),
+          (checksum("restoretest"), checksum("inventory")))
+    subprocess.run(root + ["-e", "DROP DATABASE restoretest"], check=True, capture_output=True)
     ods_name = [n for n in names if n.endswith(".ods")][0]
     r = admin.get(f"{BASE}/admin/backups.php", params={"download": ods_name})
     check("download ods", r.status_code == 200 and "attachment" in r.headers.get("content-disposition", ""))
@@ -279,14 +303,23 @@ def main():
             open(os.path.join(bdir, f"inventory_{d}_0400.{ext}"), "w").write("{}")
     r = requests.post(agent_url + "?action=backup", headers=hdr, json={})
     data = r.json()
-    check("agent backup action", r.status_code == 200 and data["items"] >= 6 and len(data["files"]) == 2)
-    left = sorted({re.sub(r"\.(ods|json)$", "", os.path.basename(f)) for f in glob.glob(os.path.join(bdir, "inventory_*"))})
+    check("agent backup action", r.status_code == 200 and data["items"] >= 6 and len(data["files"]) == 3)
+    left = sorted({re.sub(r"\.(ods|json|sql)$", "", os.path.basename(f)) for f in glob.glob(os.path.join(bdir, "inventory_*"))})
     months = {n[10:17] for n in left}
     check("server retention: 10 newest + firsts of month", len(left) == 13 and "inventory_2026-06-03_0400" in left and "inventory_2026-01-04_0400" in left
           and "inventory_2026-01-11_0400" not in left and months >= {"2026-01", "2026-05"}, left)
     import backup_fetch
     files = backup_fetch.verify(data)
-    check("Pi-side verify accepts the set", len(files) == 2)
+    check("Pi-side verify accepts the set", len(files) == 3)
+    old = dict(data, files={k: v for k, v in data["files"].items() if not k.endswith(".sql")})
+    check("Pi-side verify accepts an old set without sql", len(backup_fetch.verify(old)) == 2)
+    sql_key = data["base"] + ".sql"
+    cut = base64.b64decode(data["files"][sql_key])[:-200]
+    try:
+        backup_fetch.verify(dict(data, files=dict(data["files"], **{sql_key: base64.b64encode(cut).decode()})))
+        check("Pi-side verify rejects a truncated sql", False)
+    except ValueError:
+        check("Pi-side verify rejects a truncated sql", True)
     bad = dict(data, items=data["items"] + 1)
     try:
         backup_fetch.verify(bad)

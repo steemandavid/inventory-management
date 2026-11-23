@@ -20,7 +20,8 @@ import print_agent  # noqa: E402  (config + API helper)
 
 DEST = os.environ.get("INVENTORY_BACKUP_DIR", "/var/lib/inventory-backups")
 KEEP_RECENT = 10
-NAME_RE = re.compile(r"^(inventory_(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(?:_[a-z0-9-]+)?)\.(ods|json)$")
+NAME_RE = re.compile(r"^(inventory_(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(?:_[a-z0-9-]+)?)\.(ods|json|sql)$")
+EXTS = ("ods", "json", "sql")
 
 
 def backups_to_keep(dates):
@@ -48,7 +49,7 @@ def apply_retention(dest):
     removed = []
     for base in sets:
         if base not in keep:
-            for ext in ("ods", "json"):
+            for ext in EXTS:
                 p = os.path.join(dest, f"{base}.{ext}")
                 if os.path.exists(p):
                     os.remove(p)
@@ -60,7 +61,8 @@ def verify(data):
     """Check the set before storing it. Returns {name: bytes}."""
     files = {name: base64.b64decode(b64) for name, b64 in data["files"].items()}
     base = data["base"]
-    if set(files) != {f"{base}.ods", f"{base}.json"} or not NAME_RE.match(f"{base}.ods"):
+    required = {f"{base}.ods", f"{base}.json"}
+    if not required <= set(files) <= required | {f"{base}.sql"} or not NAME_RE.match(f"{base}.ods"):
         raise ValueError(f"unexpected file names: {sorted(files)}")
     backup = json.loads(files[f"{base}.json"])
     n = len(backup["tables"]["inv_items"])
@@ -72,6 +74,14 @@ def verify(data):
         rows = z.read("content.xml").count(b"<table:table-row>")
         if rows < n + 1:
             raise ValueError(f"ods has {rows} rows for {n} items")
+    sql = files.get(f"{base}.sql")
+    if sql is not None:
+        if not sql.rstrip().endswith(b"-- end of backup") or b"CREATE TABLE `inv_items`" not in sql:
+            raise ValueError("sql dump is incomplete")
+        insert = sql.split(b"INSERT INTO `inv_items`")
+        rows = sum(part.split(b";\n", 1)[0].count(b"\n(") for part in insert[1:])
+        if rows != n:
+            raise ValueError(f"sql has {rows} item rows, server reported {n}")
     return files
 
 
