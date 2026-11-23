@@ -226,7 +226,7 @@ Box + Bin isn't unique: one bin can hold several components, each with its own l
 ### 7.1 Login
 
 - `/inventory/admin/` shows a login form: password only (single admin, no username).
-- Session lasts 30 days of inactivity on a device (configurable), so you don't have to log in
+- Session lasts 365 days of inactivity on a device (sliding; was 30 days in v0.2, changed at David's request), so you don't have to log in
   every time on your phone. There's a "log out everywhere" button.
 - Security details in chapter 9.
 
@@ -348,14 +348,16 @@ The public search is open on purpose. Everything else must be properly secured.
 
 ### 9.2 Sessions
 
-- Random 256-bit token in a cookie: `Secure; HttpOnly; SameSite=Strict; Path=/inventory/`.
+- Random 256-bit token in a cookie: `Secure; HttpOnly; SameSite=Lax; Path=/inventory/`. Lax instead of Strict:
+  Strict dropped the cookie when the site was opened from a link in another app, which looked like being logged out.
+  Lax still never sends the cookie on cross-site POSTs.
 - Only a hash of the token is stored server-side (`inv_sessions`), like verba.
 - New token on login (no session fixation). Logout deletes the server-side session.
 - Password change invalidates all sessions.
 
 ### 9.3 Requests
 
-- CSRF token on every state-changing form/request (in addition to `SameSite=Strict`).
+- CSRF token and an Origin/Referer check on every state-changing form/request (in addition to `SameSite=Lax`).
 - All database access via PDO prepared statements.
 - All output HTML-escaped. A strict Content-Security-Policy (no inline scripts, no third-
   party sources), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`,
@@ -562,6 +564,7 @@ length for text; typical font sizes after shrink-to-fit are 5.3 to 10 pt. The sm
 | 3 | Print agent live on labelpi (systemd `inventory-agent`, user `invagent`, hardened). End-to-end print from the live site confirmed by David. The agent authenticates with an `X-Agent-Token` header (PHP-FPM may drop `Authorization`). Temporary passwordless sudo on the Pi removed |
 | 4 | Weekly backup timer on labelpi (Sun 04:00, `Persistent=true`), retention identical on server and Pi (tested over 3 simulated years), john-ai pull at 23:30 with a key restricted to `rrsync -ro`, stale-backup warning via `/var/log/backup-warnings.log` into the Monday summary (Q5; the existing backup scripts were not modified). Restore of the live backup set (.json and .ods) tested on the dev environment |
 | 5 | README rewritten for the web app, CHANGELOG 2.0.0, macro README moved to `legacy/` |
+| 2.1 | Follow-up requests: renamed to "Inventory management", Admin link in the admin nav, Select all / Remove selection, green/red printer status, 365-day sessions (SameSite=Lax), dated file names in the backup list, cache busting for CSS/JS. Unauthenticated access to every admin page and action re-tested on the live site: all redirect to login, agent API 401 |
 
 ### 12.1 Tests
 
