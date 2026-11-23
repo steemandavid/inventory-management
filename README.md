@@ -1,194 +1,99 @@
-# KelderInventory - Label Printing System
+# KelderInventory
 
-> **Status (2026-11-23):** this LibreOffice macro is being replaced by a web application
-> (public search at steeman.be/inventory, admin editing, Dymo printing via a Raspberry Pi).
-> See [`FSD_Web_Inventory.md`](FSD_Web_Inventory.md). The macro, spreadsheet and their
-> scripts now live in [`legacy/`](legacy/); the instructions below describe that legacy setup.
+Inventory of the basement lab: public component lookup, password-protected editing, and
+12 × 50 mm Dymo labels printed from any device.
 
+- **Public search:** https://www.steeman.be/inventory/
+- **Admin:** https://www.steeman.be/inventory/admin/ (single password)
+- **Spec:** [`FSD_Web_Inventory.md`](FSD_Web_Inventory.md) (design, security, test results)
 
-A LibreOffice Calc macro system for printing inventory labels on Dymo LabelWriter printers. Designed for cross-platform use on both Windows and Linux.
+The old LibreOffice spreadsheet + macro live in [`legacy/`](legacy/) and are no longer used.
 
-## Features
+## How it fits together
 
-- **One-click label printing** directly from LibreOffice Calc
-- **Batch printing** - select multiple rows to print multiple labels
-- **Cross-platform** - works on Windows and Linux without external tools
-- **Configurable** - adjustable font sizes and output modes
-- **Validation** - mandatory field checking with clear error messages
-- **Dry-run mode** - preview labels as PDF before printing
+```
+ browser ──HTTPS──► steeman.be/inventory (LWS: PHP 8.4 + MariaDB, tables inv_*)
+                         ▲  print jobs, weekly backup (outbound HTTPS, every 5 s)
+                         │
+ labelpi (Pi 1 B+, 192.168.1.20) ── USB ── Dymo LabelWriter 450 (labels 99017, 12 × 50 mm)
+     /var/lib/inventory-backups ◄── rsync pull 23:30 ── john-ai: /home/john/backups/inventory ── Borg 00:00 ── offsite
+```
 
-## Requirements
+| Part | Where | What |
+|------|-------|------|
+| `web/` | LWS `/inventory/` | the web app (public search, admin, print queue, backups, agent API) |
+| `agent/` | labelpi `/opt/inventory-agent` | print agent (systemd `inventory-agent`), weekly backup (`inventory-backup.timer`, Sun 04:00) |
+| `tools/` | john-ai | deploy, import, Phase 0 print test, nightly backup pull, stale-backup check |
+| `tests/` | john-ai | HTTP tests and retention tests against the local docker environment |
+| `dev/` | john-ai | docker environment that mimics LWS: http://192.168.1.165:8095/inventory/ |
 
-- **LibreOffice Calc** (tested with LibreOffice 7.x+)
-- **Dymo LabelWriter 450** (or compatible)
-- **Dymo 30334 labels** (12mm × 50mm / ½" × 2")
+## Daily use
 
-## Installation
+- **Find something:** type in the search box. Every word must match somewhere; case and accents don't matter.
+  `03/02` (or `3-2`) shows box 03, bin 02; `03` puts box 03 first.
+- **Add:** Admin → Add. *Save, print label, add another* is the fast way to fill a box.
+- **Print:** *Print label* per item, or tick several and *Print selected labels*. The printer status at the top
+  of the admin links to the print queue (cancel, print again, errors).
+- **Undo:** Admin → History lists every change; deleted items can be restored there.
 
-### 1. Download the Files
+## Operations
 
-Clone this repository or download `KelderInventory.ods` and `LabelPrintMacro.bas`.
+### Deploy the web app
 
 ```bash
-git clone https://github.com/steemandavid/inventory-management.git
+tools/deploy.sh            # upload web/ over FTPS (~/.netrc) and run the security checks
+tools/deploy.sh --check    # only the checks: HTTPS redirect, headers, blocked files, no PHP source, no cache
 ```
 
-### 2. Open the Spreadsheet
+`config.php` is never uploaded unless asked (`--config deploy/config.prod.php`). `deploy/` is not in git: it
+holds the production config with the IP pepper. The database credentials are not in it; they're read on the
+server from verba's config (one shared schema, FSD §4.2).
 
-Open `KelderInventory.ods` in LibreOffice Calc. The macro is embedded in the file.
+### Print agent on the Pi
 
-### 3. Initialize Configuration
-
-Run the initialization macro to create the Config sheet:
-
-1. Go to **Tools → Macros → Run Macro**
-2. Navigate to **KelderInventory.ods → Standard**
-3. Select **InitializeConfigSheet** and click **Run**
-
-### 4. Printer Setup
-
-Ensure your Dymo printer is named `LabelWriter-450` in your system:
-
-- **Linux**: Check in CUPS (http://localhost:631) or System Settings → Printers
-- **Windows**: Check in Control Panel → Devices and Printers
-
-## Usage
-
-### Data Entry
-
-Enter your inventory data in the spreadsheet with these columns:
-
-| Column | Field | Required | Printed |
-|--------|-------|----------|---------|
-| A | Box | Yes | Yes |
-| B | Bin | Yes | Yes |
-| C | Label row 1 | Yes | Yes |
-| D | Label row 2 | No | Yes |
-| E | Label row 3 | No | Yes |
-| F | Keywords | No | No |
-| G | Comments | No | No |
-
-### Printing Labels
-
-1. Select one or more data rows (not the header row)
-2. Click the **Print Label(s)** button
-3. Labels will be validated and printed
-
-### Preview Mode (Dry-Run)
-
-To preview labels before printing:
-
-1. Open the **Config** sheet
-2. Set **Output Mode** to `DRY_RUN`
-3. Click **Print Label(s)** - a PDF preview will be generated
-
-## Label Layout
-
-```
-┌────────────────────────────────────────────────┐
-│ Label row 1 (bold)                        03   │
-│ Label row 2                               02   │
-│ Label row 3                                    │
-└────────────────────────────────────────────────┘
-         Labels (78%)                    Box/Bin
-                                         (18%)
+```bash
+agent/install.sh           # install/update code + systemd units (asks for the Pi's sudo password)
+ssh john@192.168.1.20 'journalctl -u inventory-agent -f'          # watch it
 ```
 
-- **Labels section** (left, 78%): Up to 3 lines of text, left-aligned
-- **Box/Bin section** (right, 18%): Box number above Bin number, centered
+New agent token (Admin → Settings → Print agent → Replace agent token), then on john-ai:
 
-## Configuration
-
-The **Config** sheet contains these settings:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Font Size - Box | 14 | Font size in points for Box number |
-| Font Size - Bin | 12 | Font size in points for Bin number |
-| Font Size - Label 1 | 9 | Font size for first label line (bold) |
-| Font Size - Label 2 | 7 | Font size for second label line |
-| Font Size - Label 3 | 6 | Font size for third label line |
-| Output Mode | DRY_RUN | `PRINT` or `DRY_RUN` |
-| Show Complete Message | NO | Show completion dialog (`YES`/`NO`) |
-| Export Path | (document folder) | PDF export location for dry-run |
-
-## Available Macros
-
-| Macro | Description |
-|-------|-------------|
-| `PrintLabels` | Main entry point - prints selected rows |
-| `InitializeConfigSheet` | Creates/resets Config sheet with defaults |
-| `ShowConfig` | Displays current configuration |
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| "Config sheet not found" | Run `InitializeConfigSheet` macro |
-| "No rows selected" | Select data rows (not header row 1) |
-| Validation errors | Check mandatory fields A, B, C are filled |
-| Printing issues | Verify printer name matches `LabelWriter-450` |
-| Labels not aligned | Ensure Dymo driver is installed correctly |
-
-## Project Structure
-
-```
-inventory-management/
-├── KelderInventory.ods      # Main spreadsheet with embedded macro
-├── LabelPrintMacro.bas      # Macro source code (for reference/backup)
-├── FSD_Label_Macro_12x50mm.md  # Functional specification document
-├── README.md                # This file
-├── README.txt               # Legacy readme
-├── CHANGELOG.md             # Version history
-├── LICENSE                  # License file
-├── generate_label.py        # Python script for headless generation (optional)
-└── test_label.py            # Test script (development)
+```bash
+printf '%s' TOKEN > /tmp/t && scp /tmp/t john@192.168.1.20:t && rm /tmp/t
+ssh -t john@192.168.1.20 'sudo install -m 640 -o root -g invagent t /etc/inventory-agent/token && rm t && sudo systemctl restart inventory-agent'
 ```
 
-## Technical Details
+CUPS queue `LabelWriter-450`, media `w36h144`. Label layout (fonts, margins measured in Phase 0) is set in
+Admin → Settings and sent with every print job.
 
-### How It Works
+### Backups
 
-1. The macro creates a hidden LibreOffice Writer document
-2. Page is set to portrait orientation (12mm × 50mm) matching the physical label
-3. Text is rotated 90° counter-clockwise for correct reading orientation
-4. Document is either exported to PDF (dry-run) or sent to printer
-5. The hidden document is closed automatically
+| Copy | Location | Retention |
+|------|----------|-----------|
+| 1 | LWS `inventory/_backups/` (blocked from the web; download in Admin → Backups) | 10 newest + first of every month forever |
+| 2 | labelpi `/var/lib/inventory-backups/` | same |
+| 3 | john-ai `/home/john/backups/inventory/` → Borg System repo → offsite Pi | everything ever pulled |
 
-### Cross-Platform Compatibility
+Each set is `inventory_YYYY-MM-DD_HHMM.ods` (opens in LibreOffice/Excel, old spreadsheet columns + Config sheet)
+and `.json` (exact restore). If the newest set is older than 8 days, or the nightly pull fails for 2 days,
+`/usr/local/bin/inventory-backup-check` (cron 07:00) adds a warning to the Monday backup summary email.
 
-The macro uses only LibreOffice's built-in printing capabilities without relying on:
-- Shell commands (`lp`, `print`, etc.)
-- Operating system-specific APIs
-- External PDF tools
+**Restore:** Admin → Backups → Restore: upload a `.json` (items + label settings) or an `.ods` in the old
+spreadsheet layout. A backup of the current state is made first.
 
-This ensures consistent behavior on both Windows and Linux.
+### Development and tests
 
-## Contributing
+```bash
+docker compose -f dev/compose.yaml up -d --build   # local LWS look-alike (DB is in tmpfs)
+python3 tests/test_web.py      # 123 HTTP tests; resets the dev database
+python3 tests/test_retention.py  # server and Pi retention rules agree
+```
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+The dev environment uses `web/config.php` (dev settings, not in git) and admin password `test-password-123`.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Security summary
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Developed for basement/cellar inventory management
-- Inspired by the need for quick, reliable label printing
-- Built with LibreOffice Basic and UNO API
-
-## Version History
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
-
----
-
-**Author**: Barraam
-**Repository**: [github.com/steemandavid/inventory-management](https://github.com/steemandavid/inventory-management)
+Public pages are read-only, cookie-free and rate-limited (60 searches/min/IP). The admin uses an argon2id
+password with per-IP and global lockouts, hashed session tokens (`Secure; HttpOnly; SameSite=Strict`), CSRF
+tokens plus origin checks, and a strict CSP. The Pi only makes outbound HTTPS calls with a token that can print
+and fetch backups, nothing else. Details and test results: FSD chapter 9 and §4.3.

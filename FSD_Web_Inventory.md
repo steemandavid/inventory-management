@@ -7,10 +7,10 @@
 
 | Item | Value |
 |------|-------|
-| Version | 0.2 (draft for discussion) |
+| Version | 1.0 (implemented) |
 | Date | 2026-11-23 |
 | Author | David Steeman |
-| Status | Draft. **Phase 0 passed, decision GO (David, 2026-11-23).** |
+| Status | **Implemented and live (2026-11-23).** Phases 0 to 5 done; results per phase below. |
 | Supersedes | `legacy/KelderInventory.ods` + `legacy/LabelPrintMacro.bas` (see `legacy/FSD_Label_Macro_12x50mm.md`) |
 
 ---
@@ -551,6 +551,17 @@ length for text; typical font sizes after shrink-to-fit are 5.3 to 10 pt. The sm
 | **3** | Print queue API + Pi print agent as systemd service; printer status in UI | Print from phone (outside the LAN) produces a correct label |
 | **4** | Backups: export (`.ods` + `.json`), Pi timer, retention on LWS and Pi, john-ai rsync pull into Borg, restore tool | A restore from each of the three locations has been tested |
 | **5** | Documentation (README, CHANGELOG), retire the macro (mark as legacy in README) | |
+
+### 12.0 Status (2026-11-23)
+
+| Phase | Result |
+|-------|--------|
+| 0 | GO, see §11.5. Hardware ended up as a **Pi 1 Model B+** (32-bit Raspbian, Ethernet) instead of the Zero 2 W |
+| 1 | Passed, see §4.3 |
+| 2 | Live at https://www.steeman.be/inventory/. Admin password set by David via the token-protected `setup.php`, which was then removed. Extra requests implemented: "Save, print label, add another", "Print label" per item, Admin link at the top of the public page, back-to-top arrow. Items show "in print queue" / "printed <date>" |
+| 3 | Print agent live on labelpi (systemd `inventory-agent`, user `invagent`, hardened). End-to-end print from the live site confirmed by David. The agent authenticates with an `X-Agent-Token` header (PHP-FPM may drop `Authorization`). Temporary passwordless sudo on the Pi removed |
+| 4 | Weekly backup timer on labelpi (Sun 04:00, `Persistent=true`), retention identical on server and Pi (tested over 3 simulated years), john-ai pull at 23:30 with a key restricted to `rrsync -ro`, stale-backup warning via `/var/log/backup-warnings.log` into the Monday summary (Q5; the existing backup scripts were not modified). Restore of the live backup set (.json and .ods) tested on the dev environment |
+| 5 | README rewritten for the web app, CHANGELOG 2.0.0, macro README moved to `legacy/` |
 
 ### 12.1 Tests
 

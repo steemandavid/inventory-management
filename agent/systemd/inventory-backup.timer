@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly KelderInventory backup (Sunday 04:00)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+# catch up after downtime (e.g. Pi was off on Sunday)
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

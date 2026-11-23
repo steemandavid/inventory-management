@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-23
+
+### Added
+- Web app at https://www.steeman.be/inventory/ (PHP 8.4 + MariaDB on LWS), replacing the spreadsheet:
+  public live search, admin login, add/edit/duplicate/delete, history with restore, label settings,
+  live label preview.
+- Print queue and print agent on a Raspberry Pi (labelpi) with the Dymo LabelWriter 450: print one label,
+  selected labels, or "Save, print label, add another" from any device.
+- Weekly backups (.ods + .json) on LWS, on the Pi and in john-ai's Borg backup; retention 10 newest +
+  first of every month; restore from .json or .ods; stale-backup warning in the Monday summary email.
+- Deploy script with post-deploy security checks; docker dev environment; 123 HTTP tests.
+
+### Changed
+- Labels are now rendered by ReportLab on the Pi for Dymo 99017 labels (CUPS media w36h144), with the
+  printable area measured in the Phase 0 print test.
+- The LibreOffice macro, spreadsheet and scripts moved to `legacy/`.
+
 ## [1.4.0] - 2026-01-26
 
 ### Changed

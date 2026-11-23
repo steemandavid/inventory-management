@@ -5,6 +5,7 @@ Run:  python3 tests/test_web.py [base_url]
 It resets the database (inv_* tables) first, so never point it at production.
 """
 
+import base64
 import re
 import subprocess
 import sys
@@ -17,6 +18,8 @@ ORIGIN = re.match(r"https?://[^/]+", BASE).group(0)
 TOKEN = "devsetuptoken-0123456789abcdef0123456789"
 PASSWORD = "test-password-123"
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "agent"))
+os.environ.setdefault("INVENTORY_AGENT_CONF", "/nonexistent")
 COMPOSE = os.path.join(HERE, "..", "dev", "compose.yaml")
 
 results = []
@@ -230,6 +233,81 @@ def main():
     admin.post(f"{BASE}/admin/print.php", data={"id": ids[0], "csrf": token}, headers={"Origin": ORIGIN})
     admin.post(f"{BASE}/admin/jobs.php", data={"action": "cancel_all", "csrf": token}, headers={"Origin": ORIGIN})
     check("cancel all queued", ">queued<" not in admin.get(f"{BASE}/admin/jobs.php").text)
+
+    # --- backups (Phase 4) ------------------------------------------------------------------
+    import glob, io, shutil, tempfile, zipfile
+    bdir = os.path.join(HERE, "..", "web", "_backups")
+    for f in glob.glob(os.path.join(bdir, "inventory_*")):
+        os.remove(f)
+    page = admin.get(f"{BASE}/admin/backups.php").text
+    check("backups page warns: never run", "has not run yet" in page)
+    r = admin.post(f"{BASE}/admin/backups.php", data={"action": "backup_now", "csrf": token}, headers={"Origin": ORIGIN},
+                   allow_redirects=False)
+    check("back up now", r.status_code == 303)
+    page = admin.get(f"{BASE}/admin/backups.php").text
+    names = re.findall(r"download=(inventory_[\w-]+\.(?:ods|json))", page)
+    check("backup set listed (ods + json)", len(names) == 2 and "(manual)" in page, names)
+    ods_name = [n for n in names if n.endswith(".ods")][0]
+    r = admin.get(f"{BASE}/admin/backups.php", params={"download": ods_name})
+    check("download ods", r.status_code == 200 and "attachment" in r.headers.get("content-disposition", ""))
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    check("ods: mimetype first and stored", z.infolist()[0].filename == "mimetype" and z.infolist()[0].compress_type == 0)
+    if shutil.which("soffice"):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "b.ods")
+            open(p, "wb").write(r.content)
+            subprocess.run(["soffice", "--headless", "--convert-to", "csv", "--outdir", tmp, p], capture_output=True, timeout=120)
+            csv_text = open(os.path.join(tmp, "b.csv"), encoding="utf-8").read()
+        check("LibreOffice opens ods, leading zeros kept", csv_text.startswith("Box,Bin,Label row 1") and "03,02,Screws" in csv_text, csv_text[:120])
+    for bad in ("../config.php", "inventory_2026-01-01_0000.php", "/etc/passwd", ".htaccess"):
+        check(f"download refuses {bad}", admin.get(f"{BASE}/admin/backups.php", params={"download": bad}).status_code == 404)
+    check("backup files not public", anon.get(f"{BASE}/_backups/{ods_name}").status_code == 403)
+    check("download needs login", anon.get(f"{BASE}/admin/backups.php", params={"download": ods_name}, allow_redirects=False).status_code == 303)
+
+    # retention on the server: 15 old weekly sets + 2 in an older month
+    for d in ["2026-01-04", "2026-01-11"] + [f"2026-0{m}-{dd:02d}" for m in (5, 6, 7) for dd in (3, 10, 17, 24, 31) if not (m == 6 and dd == 31)]:
+        for ext in ("ods", "json"):
+            open(os.path.join(bdir, f"inventory_{d}_0400.{ext}"), "w").write("{}")
+    r = requests.post(agent_url + "?action=backup", headers=hdr, json={})
+    data = r.json()
+    check("agent backup action", r.status_code == 200 and data["items"] >= 6 and len(data["files"]) == 2)
+    left = sorted({re.sub(r"\.(ods|json)$", "", os.path.basename(f)) for f in glob.glob(os.path.join(bdir, "inventory_*"))})
+    months = {n[10:17] for n in left}
+    check("server retention: 10 newest + firsts of month", len(left) == 13 and "inventory_2026-06-03_0400" in left and "inventory_2026-01-04_0400" in left
+          and "inventory_2026-01-11_0400" not in left and months >= {"2026-01", "2026-05"}, left)
+    import backup_fetch
+    files = backup_fetch.verify(data)
+    check("Pi-side verify accepts the set", len(files) == 2)
+    bad = dict(data, items=data["items"] + 1)
+    try:
+        backup_fetch.verify(bad)
+        check("Pi-side verify rejects wrong count", False)
+    except ValueError:
+        check("Pi-side verify rejects wrong count", True)
+    check("backups page shows last fetch", "last fetched" in admin.get(f"{BASE}/admin/backups.php").text)
+
+    # restore from the .json made above, after deleting an item
+    json_name = data["base"] + ".json"
+    backup_json = base64.b64decode(data["files"][json_name])
+    n_before = api("")["total"]
+    admin.post(f"{BASE}/admin/delete.php?id={ids[0]}", data={"id": ids[0], "csrf": token}, headers={"Origin": ORIGIN})
+    r = admin.post(f"{BASE}/admin/backups.php", data={"action": "restore", "confirm": "nope", "csrf": token},
+                   files={"file": (json_name, backup_json)}, headers={"Origin": ORIGIN})
+    check("restore needs REPLACE", "Type REPLACE" in r.text and api("")["total"] == n_before - 1)
+    r = admin.post(f"{BASE}/admin/backups.php", data={"action": "restore", "confirm": "REPLACE", "csrf": token},
+                   files={"file": (json_name, backup_json)}, headers={"Origin": ORIGIN}, allow_redirects=False)
+    check("restore from json", r.status_code == 303 and api("")["total"] == n_before)
+    check("pre-restore backup made", "(before restore)" in admin.get(f"{BASE}/admin/backups.php").text)
+    ods = open(os.path.join(HERE, "..", "legacy", "KelderInventory.ods"), "rb").read()
+    r = admin.post(f"{BASE}/admin/backups.php", data={"action": "restore", "confirm": "REPLACE", "csrf": token},
+                   files={"file": ("KelderInventory.ods", ods)}, headers={"Origin": ORIGIN}, allow_redirects=False)
+    check("restore from the old spreadsheet (.ods)", r.status_code == 303 and api("")["total"] == 6
+          and api("3/2")["items"][0]["box"] == "03")
+    r = admin.post(f"{BASE}/admin/backups.php", data={"action": "restore", "confirm": "REPLACE", "csrf": token},
+                   files={"file": ("x.json", b'{"hello": 1}')}, headers={"Origin": ORIGIN})
+    check("restore rejects foreign json", "not a backup" in r.text and api("")["total"] == 6)
+    for f in glob.glob(os.path.join(bdir, "inventory_*")):
+        os.remove(f)
 
     # --- password change logs out other sessions ---------------------------------------
     other = requests.Session()

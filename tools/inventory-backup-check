@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Daily on john-ai (root, /etc/cron.d/inventory-backup-check, 07:00): if the inventory backups
+# are stale, append a line to /var/log/backup-warnings.log. The existing Monday backup summary
+# email (backup-status) lists those lines and marks the subject [WARNINGS] (FSD §10.2, Q5).
+set -u
+DIR=/home/john/backups/inventory
+LOG=/var/log/backup-warnings.log
+warn() { printf '%s\t%s\n' "$(date -Is)" "Inventory backup: $1" >> "$LOG"; }
+
+newest=$(ls -1t "$DIR"/inventory_*.json 2>/dev/null | head -1)
+if [ -z "$newest" ]; then
+  warn "no backup sets in $DIR"
+else
+  age_days=$(( ($(date +%s) - $(stat -c %Y "$newest")) / 86400 ))
+  [ "$age_days" -gt 8 ] && warn "newest set $(basename "$newest") is $age_days days old (weekly backup on labelpi not running?)"
+fi
+if [ ! -f "$DIR/.last-pull" ] || [ $(( ($(date +%s) - $(stat -c %Y "$DIR/.last-pull")) / 86400 )) -gt 2 ]; then
+  warn "nightly pull from labelpi (192.168.1.20) has not succeeded for more than 2 days, see $DIR/.pull.log"
+fi
+exit 0

@@ -1,0 +1,18 @@
+[Unit]
+Description=KelderInventory weekly backup (fetch from steeman.be/inventory, store on SD card)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=invagent
+Group=invagent
+ExecStart=/usr/bin/python3 /opt/inventory-agent/backup_fetch.py
+# retries hourly for up to 24 h inside the script
+TimeoutStartSec=26h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=/etc/inventory-agent
+ReadWritePaths=/var/lib/inventory-backups

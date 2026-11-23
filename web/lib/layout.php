@@ -24,6 +24,7 @@ function page_start(string $title, bool $admin = false, array $scripts = []): vo
     if ($admin) {
         echo '<nav><a href="', h(url('admin/edit.php')), '">Add</a>',
             '<a href="', h(url('admin/audit.php')), '">History</a>',
+            '<a href="', h(url('admin/backups.php')), '">Backups</a>',
             '<a href="', h(url('admin/settings.php')), '">Settings</a>',
             '<a href="', h(url('')), '">Public view</a></nav>';
         $a = agent_status();

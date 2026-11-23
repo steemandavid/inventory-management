@@ -137,3 +137,4 @@ web/config.php
 print_test.log
 web/setup-seed.json
 deploy/
+web/_backups/inventory_*

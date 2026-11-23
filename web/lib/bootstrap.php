@@ -194,6 +194,7 @@ function default_settings(): array
         'margin_top_mm' => '1.2', 'margin_bottom_mm' => '2.0',
         'rotate' => '270', 'boxbin_side' => 'right',
         'last_box' => '', 'last_bin' => '',
+        'last_backup_at' => '', 'last_backup_fetched_at' => '',
     ];
 }
 

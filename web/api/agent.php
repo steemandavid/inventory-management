@@ -7,10 +7,12 @@ declare(strict_types=1);
  *
  *   POST ?action=poll    body: {"version": "...", "printer": "..."}  -> {"jobs": [...]}
  *   POST ?action=report  body: {"id": 1, "claim": "...", "status": "printed"|"failed", "error": "..."}
+ *   POST ?action=backup  -> {"base": "...", "items": n, "files": {"name.ods": base64, "name.json": base64}}
  */
 require dirname(__DIR__) . '/lib/bootstrap.php';
 require dirname(__DIR__) . '/lib/items.php';
 require_once dirname(__DIR__) . '/lib/print.php';
+require dirname(__DIR__) . '/lib/backup.php';
 
 send_security_headers(true);
 header('Content-Type: application/json; charset=utf-8');
@@ -73,6 +75,17 @@ switch ($_GET['action'] ?? '') {
                 ->execute([now(), $id]);
         }
         reply(['ok' => true]);
+
+    case 'backup':
+        // Weekly backup (FSD §10.2): make a set on LWS, apply retention, hand the files to the Pi.
+        $base = make_backup();
+        save_setting('last_backup_fetched_at', now());
+        $files = [];
+        foreach (['ods', 'json'] as $ext) {
+            $files["$base.$ext"] = base64_encode((string) file_get_contents(backup_dir() . "/$base.$ext"));
+        }
+        $count = (int) $pdo->query('SELECT COUNT(*) FROM inv_items')->fetchColumn();
+        reply(['base' => $base, 'items' => $count, 'files' => $files]);
 
     default:
         reply(['error' => 'unknown action'], 400);
