@@ -134,6 +134,27 @@ instead (if `pdo_sqlite` is available, checked in Phase 1). That file would also
 the web root, protected by `.htaccess`, so it carries the same source-leak risk as
 `config.php`. That's why the shared MariaDB schema is preferred.
 
+### 4.3 Phase 1 results (measured 2026-11-23, probe uploaded to `/inventory/_probe/` and removed)
+
+| Check | Result |
+|-------|--------|
+| PHP | 8.4.28 `fpm-fcgi`, `argon2id` available, `display_errors` must be switched off in code (as in verba) |
+| Extensions | `pdo_mysql`, `pdo_sqlite`, `zip`, `sodium`, `mbstring`, `intl`, `xmlwriter`, `dom` all present |
+| ODS export | `ZipArchive` writes and reads back an ODS-style zip (stored `mimetype` first): **native `.ods` is possible**, no `.fods` fallback needed |
+| Database | MariaDB 10.11.20. **One schema confirmed**: `CREATE DATABASE` is refused. Schema has 7 verba tables, no `inv_*` yet. `max_user_connections` = 8 |
+| Search | `utf8mb4_unicode_ci` is case- and accent-insensitive (`cafe` finds `Café`); FULLTEXT indexes are allowed. Unicode (µ, ×, Ω) round-trips intact |
+| `.htaccess` deny | `Require all denied` works: `.txt`, `.php` (not executed), `.ods` and `.htaccess` in a denied folder all return **403** |
+| PHP source leak | No `<?php` in any response |
+| Edge cache | Two calls gave different output, both `x-cache-status: MISS`; `Cache-Control: no-store` passes through |
+| HTTPS | **Plain HTTP is not redirected** (returns 200) and no HSTS header is sent. The app's `.htaccess` must add the redirect and PHP must send HSTS (§9.3); `deploy.sh` checks it |
+| `robots.txt` | Belongs to the Hugo site and gets overwritten on site deploys, so the app relies on `X-Robots-Tag: noindex, nofollow` + `<meta name="robots">` instead of editing it |
+| Time zone | PHP default `Europe/Paris` (same offset as Brussels); the app sets `Europe/Brussels` explicitly |
+| Limits | `memory_limit` 384M, `max_execution_time` 90 s, uploads up to 288M: plenty for import/restore |
+| Disabled functions | `system`, `passthru`, `proc_open`, `popen` etc. are disabled: the app must not shell out (it doesn't need to) |
+| DB credentials | The probe read them from verba's server-side `config.php`, so they never left the server. For the app, `inventory/config.php` gets its own copy (§9.5) |
+
+**Phase 1 passed.** No blockers.
+
 ---
 
 ## 5. Data Model
