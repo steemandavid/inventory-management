@@ -1,5 +1,11 @@
 # KelderInventory - Label Printing System
 
+> **Status (2026-11-23):** this LibreOffice macro is being replaced by a web application
+> (public search at steeman.be/inventory, admin editing, Dymo printing via a Raspberry Pi).
+> See [`FSD_Web_Inventory.md`](FSD_Web_Inventory.md). The macro, spreadsheet and their
+> scripts now live in [`legacy/`](legacy/); the instructions below describe that legacy setup.
+
+
 A LibreOffice Calc macro system for printing inventory labels on Dymo LabelWriter printers. Designed for cross-platform use on both Windows and Linux.
 
 ## Features

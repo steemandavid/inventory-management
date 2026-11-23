@@ -131,3 +131,7 @@ secrets.json
 # -----------------------------------------------------------------------------
 *.log
 logs/
+
+# Web inventory
+web/config.php
+print_test.log
