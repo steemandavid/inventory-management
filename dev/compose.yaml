@@ -1,0 +1,19 @@
+# Local test environment for the web app: http://192.168.1.165:8095/inventory/
+# Start: docker compose -f dev/compose.yaml up -d --build
+name: inventory-dev
+services:
+  web:
+    build: .
+    ports: ["192.168.1.165:8095:80"]
+    volumes:
+      - ../web:/var/www/html/inventory
+    depends_on: [db]
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: inventory
+      MARIADB_USER: inventory
+      MARIADB_PASSWORD: devpassword
+      MARIADB_ROOT_PASSWORD: devroot
+    command: ["--max-user-connections=8", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    tmpfs: ["/var/lib/mysql"]

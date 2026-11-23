@@ -1,0 +1,24 @@
+# KelderInventory web app (FSD §9.6). FTP root = docroot on LWS, so everything that must
+# not be served is blocked here and checked by tools/deploy.sh after every deploy.
+# Never set the PHP version here (no AddHandler): that once made LWS serve PHP source.
+
+Options -Indexes
+DirectoryIndex index.php
+
+# Force HTTPS (LWS does not redirect plain HTTP by itself). The proxy header check avoids a
+# redirect loop if TLS ends before Apache. Local dev hosts are exempt.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1|192\.168\.)
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+# Never serve dotfiles, config, seed data, SQL, docs or logs.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+<FilesMatch "^(config\.php|config\.example\.php|setup-seed\.json)$|\.(sql|md|log|bak|txt|json|ods)$">
+  Require all denied
+</FilesMatch>
