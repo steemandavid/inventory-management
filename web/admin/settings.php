@@ -59,6 +59,11 @@ if (is_post()) {
             flash_set('Password changed. All other devices have been logged out.');
             redirect('admin/settings.php');
         }
+    } elseif ($action === 'agent_token') {
+        // Shown once on this page, stored only as a hash (FSD §9.4). Replaces the old token.
+        $newAgentToken = bin2hex(random_bytes(32));
+        db()->prepare('INSERT INTO inv_agent (id, token_hash) VALUES (1, ?) ON DUPLICATE KEY UPDATE token_hash = VALUES(token_hash)')
+            ->execute([hash('sha256', $newAgentToken)]);
     } elseif ($action === 'logout_all') {
         logout(true);
         redirect('admin/login.php');
@@ -89,6 +94,17 @@ echo '<section><h2>Change password</h2><form method="post" class="narrow">', csr
     '<label>New password (at least ', MIN_PASSWORD_LENGTH, ' characters)<input type="password" name="new1" required minlength="', MIN_PASSWORD_LENGTH, '" autocomplete="new-password"></label>',
     '<label>New password again<input type="password" name="new2" required minlength="', MIN_PASSWORD_LENGTH, '" autocomplete="new-password"></label>',
     '<button type="submit">Change password</button></form></section>';
+
+$agent = db()->query('SELECT last_seen, agent_version FROM inv_agent WHERE id = 1')->fetch();
+echo '<section><h2>Print agent</h2>';
+if (isset($newAgentToken)) {
+    echo '<p class="flash">New agent token (shown only once, copy it now into <code>/etc/inventory-agent/token</code> on the Pi):</p>',
+        '<p><code class="token">', h($newAgentToken), '</code></p>';
+}
+echo '<p class="note">', $agent ? 'A token is set' . ($agent['last_seen'] ? '; agent ' . h($agent['agent_version']) . ' last seen ' . h($agent['last_seen']) : '; the agent has not connected yet') : 'No agent token yet',
+    '. Making a new token disconnects the agent until it gets the new one.</p>',
+    '<form method="post">', csrf_field(), '<input type="hidden" name="action" value="agent_token">',
+    '<button type="submit">', $agent ? 'Replace agent token' : 'Create agent token', '</button></form></section>';
 
 $n = (int) db()->query('SELECT COUNT(*) FROM inv_sessions')->fetchColumn();
 $fails = (int) db()->query('SELECT COUNT(*) FROM inv_login_attempts WHERE success = 0 AND at > NOW() - INTERVAL 1 DAY')->fetchColumn();

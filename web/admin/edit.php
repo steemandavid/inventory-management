@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/lib/bootstrap.php';
 require dirname(__DIR__) . '/lib/auth.php';
 require dirname(__DIR__) . '/lib/items.php';
+require_once dirname(__DIR__) . '/lib/print.php';
 require dirname(__DIR__) . '/lib/layout.php';
 
 require_admin();
@@ -38,7 +39,13 @@ if (is_post()) {
             $id = create_item($item);
             flash_set('Added: ' . $item['box'] . '/' . $item['bin'] . ' ' . $item['label1']);
         }
-        if (($_POST['next'] ?? '') === 'another') {
+        $next = $_POST['next'] ?? '';
+        if ($next === 'print_another') {
+            [$n, $err] = queue_labels([$id]);
+            flash_set(($err ?? queued_message($n)) . ' Saved ' . $item['box'] . '/' . $item['bin'] . ' ' . $item['label1'] . '.');
+            redirect('admin/edit.php');
+        }
+        if ($next === 'another') {
             redirect('admin/edit.php');
         }
         redirect('admin/?q=' . rawurlencode($item['box'] . '/' . $item['bin']));
@@ -79,7 +86,8 @@ echo '<figure class="preview"><div id="label-preview" data-layout="', h(json_enc
     '<figcaption id="preview-note">Label preview (actual size on a typical phone ≈ 2×). The printed label is rendered by the print agent.</figcaption></figure>';
 echo '<div class="buttons"><button type="submit" class="primary">Save</button>';
 if ($id === 0) {
-    echo '<button type="submit" name="next" value="another">Save and add another</button>';
+    echo '<button type="submit" name="next" value="another">Save and add another</button>',
+        '<button type="submit" name="next" value="print_another">Save, print label, add another</button>';
 }
 echo '<a href="', h(url('admin/')), '">Cancel</a></div></form>';
 page_end(true);

@@ -17,11 +17,12 @@ echo '<form class="search" method="get" role="search"><input type="search" name=
     '" placeholder="Search" autocomplete="off" aria-label="Search"><button type="submit">Search</button>',
     '<a class="button primary" href="', h(url('admin/edit.php')), '">+ Add</a></form>';
 echo '<p class="count">', $total, ' item', $total === 1 ? '' : 's', '</p>';
-echo '<form id="bulk" method="post" action="', h(url('admin/print.php')), '">', csrf_field(), '</form>';
+echo '<form id="bulk" method="post" action="', h(url('admin/print.php')), '">', csrf_field(),
+    '<input type="hidden" name="back" value="', h('admin/' . ($q !== '' ? '?' . http_build_query(['q' => $q]) : '')), '">',
+    '<button type="submit">Print selected labels</button></form>';
 echo '<ul class="items">';
 foreach ($rows as $r) {
     echo item_card($r, true);
 }
 echo '</ul>', pager('admin/', $q, $page, $total);
-echo '<p class="note">Printing selected labels comes with the print agent (Phase 3).</p>';
 page_end(true);

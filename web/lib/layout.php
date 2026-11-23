@@ -2,6 +2,8 @@
 declare(strict_types=1);
 /* Page frame shared by public and admin pages. */
 
+require_once __DIR__ . '/print.php';
+
 function page_start(string $title, bool $admin = false, array $scripts = []): void
 {
     flash_take();   // must happen before any output (it clears a cookie)
@@ -13,16 +15,23 @@ function page_start(string $title, bool $admin = false, array $scripts = []): vo
         '<title>', h($title), ' · Kelder inventory</title>',
         '<link rel="stylesheet" href="', h($css), '">',
         '<link rel="icon" href="', h(url('assets/icon.svg')), '" type="image/svg+xml">';
+    $scripts[] = 'common.js';
     foreach ($scripts as $s) {
         echo '<script src="', h(url('assets/' . $s) . '?v=' . APP_VERSION), '" defer></script>';
     }
-    echo '</head><body', $admin ? ' class="admin"' : '', '><header class="top"><div class="wrap">',
+    echo '</head><body id="top"', $admin ? ' class="admin"' : '', '><header class="top"><div class="wrap">',
         '<a class="brand" href="', h(url($admin ? 'admin/' : '')), '">Kelder inventory', $admin ? ' <span class="tag">admin</span>' : '', '</a>';
     if ($admin) {
         echo '<nav><a href="', h(url('admin/edit.php')), '">Add</a>',
             '<a href="', h(url('admin/audit.php')), '">History</a>',
             '<a href="', h(url('admin/settings.php')), '">Settings</a>',
             '<a href="', h(url('')), '">Public view</a></nav>';
+        $a = agent_status();
+        $label = ['online' => 'Printer online', 'offline' => 'Printer offline', 'never' => 'Printer not connected'][$a['state']];
+        echo '<a class="printer st-', h($a['state']), '" href="', h(url('admin/jobs.php')), '" title="Print queue">',
+            h($label), $a['queued'] ? ' · ' . $a['queued'] . ' queued' : '', '</a>';
+    } else {
+        echo '<nav><a href="', h(url('admin/')), '">Admin</a></nav>';
     }
     echo '</div></header><main class="wrap">';
 }
@@ -33,10 +42,8 @@ function page_end(bool $admin = false): void
     if ($admin) {
         echo '<form method="post" action="', h(url('admin/logout.php')), '" class="inline">', csrf_field(),
             '<button class="linklike" type="submit">Log out</button></form>';
-    } else {
-        echo '<a href="', h(url('admin/')), '">Admin</a>';
     }
-    echo '</footer></body></html>';
+    echo '</footer><a href="#top" class="totop" id="totop" aria-label="Back to top" title="Back to top">↑</a></body></html>';
 }
 
 function flash_set(string $msg): void
@@ -90,9 +97,13 @@ function item_card(array $r, bool $adminLinks = false): string
     }
     if ($adminLinks) {
         $id = (int) $r['id'];
+        $back = 'admin/' . (isset($_GET['q']) && is_string($_GET['q']) ? '?' . http_build_query(['q' => $_GET['q']]) : '');
         $out .= '<div class="actions"><a href="' . h(url('admin/edit.php?id=' . $id)) . '">Edit</a>'
             . '<a href="' . h(url('admin/edit.php?copy=' . $id)) . '">Duplicate</a>'
             . '<a href="' . h(url('admin/delete.php?id=' . $id)) . '">Delete</a>'
+            . '<form method="post" action="' . h(url('admin/print.php')) . '" class="inline">' . csrf_field()
+            . '<input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="back" value="' . h($back) . '">'
+            . '<button type="submit" class="linklike">Print label</button></form>'
             . ($r['last_printed_at'] ? '' : '<span class="never">never printed</span>') . '</div>';
     }
     return $out . '</div></li>';

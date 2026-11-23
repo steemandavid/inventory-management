@@ -105,3 +105,20 @@ table.audit td:first-child { white-space: nowrap; }
 
 footer.foot { margin: 2rem auto; color: var(--muted); font-size: .9rem; }
 section { margin-bottom: 1.5rem; }
+
+/* printer status pill (admin header) and job states */
+.printer { font-size: .82rem; text-decoration: none; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--line); }
+.st-online, .st-printed { color: var(--flash); }
+.st-offline, .st-never, .st-failed { color: var(--error); }
+.st-queued, .st-printing, .st-cancelled { color: var(--muted); }
+
+/* back to top */
+.totop { position: fixed; right: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1.4rem; font-weight: 700;
+  background: var(--accent); color: var(--accent-text); box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  opacity: 0; pointer-events: none; transition: opacity .2s; }
+.totop.show { opacity: .9; pointer-events: auto; }
+html { scroll-behavior: smooth; }
+#bulk { margin: .25rem 0 .75rem; }
+
+code.token { word-break: break-all; display: block; padding: .5rem; background: var(--card); border: 1px solid var(--line); border-radius: 6px; }

@@ -172,6 +172,61 @@ def main():
     r = admin.post(f"{BASE}/admin/settings.php", data=form, headers={"Origin": ORIGIN}, allow_redirects=False)
     check("settings saved (comma decimal ok)", r.status_code == 303)
 
+    # --- print queue + agent API ---------------------------------------------------------
+    page = admin.get(f"{BASE}/admin/").text
+    check("print label link on cards", "Print label" in page and "Print selected labels" in page)
+    check("admin link at top of public page", 'href="/inventory/admin/">Admin</a></nav>' in anon.get(f"{BASE}/").text)
+    check("back-to-top arrow", 'class="totop"' in anon.get(f"{BASE}/").text)
+    check("printer never connected shown", "Printer not connected" in page)
+    ids = re.findall(r'name="ids\[\]" value="(\d+)"', page)
+    r = admin.post(f"{BASE}/admin/print.php", data={"id": ids[0], "back": "admin/?q=03", "csrf": token},
+                   headers={"Origin": ORIGIN}, allow_redirects=False)
+    check("print one label redirects back", r.status_code == 303 and r.headers["location"].endswith("admin/?q=03"))
+    r = admin.post(f"{BASE}/admin/print.php", data={"ids[]": ids[:3], "back": "https://evil.example/", "csrf": token},
+                   headers={"Origin": ORIGIN}, allow_redirects=False)
+    check("print selected (bad back url ignored)", r.status_code == 303 and r.headers["location"].endswith("/inventory/admin/"))
+    page = admin.get(f"{BASE}/admin/jobs.php").text
+    check("4 jobs queued", page.count(">queued<") == 4, page.count(">queued<"))
+    r = admin.post(f"{BASE}/admin/print.php", data={"id": "999999", "csrf": token}, headers={"Origin": ORIGIN})
+    check("print missing item refused", "Nothing was printed" in r.text)
+    r = admin.post(f"{BASE}/admin/edit.php", data={**item, "label1": "Fuses 5x20", "next": "print_another", "csrf": token},
+                   headers={"Origin": ORIGIN}, allow_redirects=False)
+    check("save, print, add another", r.status_code == 303 and r.headers["location"].endswith("admin/edit.php"))
+    check("5 jobs queued", admin.get(f"{BASE}/admin/jobs.php").text.count(">queued<") == 5)
+
+    agent_url = f"{BASE}/api/agent.php"
+    r = requests.post(agent_url + "?action=poll", json={})
+    check("agent API without token 401", r.status_code == 401)
+    r = admin.post(f"{BASE}/admin/settings.php", data={"action": "agent_token", "csrf": token}, headers={"Origin": ORIGIN})
+    agent_token = re.search(r'<code class="token">([0-9a-f]{64})</code>', r.text).group(1)
+    check("agent token shown once", agent_token and agent_token not in admin.get(f"{BASE}/admin/settings.php").text)
+    hdr = {"X-Agent-Token": agent_token}
+    check("agent token is no admin session", requests.get(f"{BASE}/admin/", headers=hdr, allow_redirects=False).status_code == 303)
+    check("agent API GET refused", requests.get(agent_url + "?action=poll", headers=hdr).status_code == 405)
+    r = requests.post(agent_url + "?action=poll", headers=hdr, json={"version": "test-1", "printer": "idle"})
+    jobs = r.json().get("jobs", [])
+    check("agent claims 5 jobs", r.status_code == 200 and len(jobs) == 5, r.text[:200])
+    check("job payload has layout", jobs and jobs[0]["label"]["layout"]["rotate"] == 270 and jobs[0]["label"]["box"])
+    r = requests.post(agent_url + "?action=poll", headers=hdr, json={})
+    check("second poll gets nothing (no double print)", r.json()["jobs"] == [])
+    check("printer online in header", "Printer online" in admin.get(f"{BASE}/admin/").text)
+    r = requests.post(agent_url + "?action=report", headers=hdr, json={"id": jobs[0]["id"], "claim": "0" * 16, "status": "printed"})
+    check("report with wrong claim refused", r.status_code == 409)
+    never_before = admin.get(f"{BASE}/admin/").text.count("never printed")
+    r = requests.post(agent_url + "?action=report", headers=hdr, json={"id": jobs[0]["id"], "claim": jobs[0]["claim"], "status": "printed"})
+    check("report printed", r.status_code == 200)
+    r = requests.post(agent_url + "?action=report", headers=hdr, json={"id": jobs[1]["id"], "claim": jobs[1]["claim"], "status": "failed", "error": "out of labels"})
+    check("report failed", r.status_code == 200)
+    page = admin.get(f"{BASE}/admin/jobs.php").text
+    check("jobs page shows printed/failed", ">printed<" in page and "out of labels" in page and "Print again" in page)
+    sql("UPDATE inv_print_jobs SET claimed_at = NOW() - INTERVAL 1 DAY WHERE status = 'printing'")
+    page = admin.get(f"{BASE}/admin/jobs.php").text
+    check("stuck jobs time out as failed", "agent timeout" in page)
+    check("printed item no longer 'never printed'", admin.get(f"{BASE}/admin/").text.count("never printed") == never_before - 1)
+    admin.post(f"{BASE}/admin/print.php", data={"id": ids[0], "csrf": token}, headers={"Origin": ORIGIN})
+    admin.post(f"{BASE}/admin/jobs.php", data={"action": "cancel_all", "csrf": token}, headers={"Origin": ORIGIN})
+    check("cancel all queued", ">queued<" not in admin.get(f"{BASE}/admin/jobs.php").text)
+
     # --- password change logs out other sessions ---------------------------------------
     other = requests.Session()
     login(other)

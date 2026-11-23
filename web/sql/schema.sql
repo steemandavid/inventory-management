@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS inv_print_jobs (
   item_id     INT UNSIGNED NULL,
   payload     TEXT      NOT NULL,
   status      VARCHAR(16) NOT NULL,
+  claim       CHAR(16)  NULL,
   error       VARCHAR(255) NOT NULL DEFAULT '',
   created_at  DATETIME  NOT NULL,
   claimed_at  DATETIME  NULL,
