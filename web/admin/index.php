@@ -10,8 +10,15 @@ require_admin();
 $q = is_string($_GET['q'] ?? null) ? mb_substr($_GET['q'], 0, 100) : '';
 $page = max(1, (int) ($_GET['page'] ?? 1));
 [$rows, $total] = search_items($q, $page);
+// Items with labels still waiting or printing: shown as "in print queue", page refreshes until done.
+$pending = array_map('intval', db()->query("SELECT DISTINCT item_id FROM inv_print_jobs
+    WHERE status IN ('queued', 'printing') AND item_id IS NOT NULL")->fetchAll(PDO::FETCH_COLUMN));
+foreach ($rows as &$r) {
+    $r['pending'] = in_array((int) $r['id'], $pending, true);
+}
+unset($r);
 
-page_start('Admin', true);
+page_start('Admin', true, $pending ? ['refresh.js'] : []);
 flash_show();
 echo '<form class="search" method="get" role="search"><input type="search" name="q" value="', h($q),
     '" placeholder="Search" autocomplete="off" aria-label="Search"><button type="submit">Search</button>',

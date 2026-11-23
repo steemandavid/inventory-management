@@ -7,3 +7,10 @@
   window.addEventListener('scroll', update, { passive: true });
   update();
 })();
+
+// Reset the print-queue auto-refresh counter once nothing is queued any more.
+(function () {
+  try {
+    if (!document.querySelector('script[src*="refresh.js"]')) sessionStorage.removeItem('inv_refresh');
+  } catch (e) { /* storage blocked: nothing to reset */ }
+})();

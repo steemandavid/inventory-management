@@ -122,3 +122,5 @@ html { scroll-behavior: smooth; }
 #bulk { margin: .25rem 0 .75rem; }
 
 code.token { word-break: break-all; display: block; padding: .5rem; background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
+.pending { color: var(--muted); font-style: italic; }
+.printed { color: var(--muted); }

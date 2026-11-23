@@ -104,7 +104,9 @@ function item_card(array $r, bool $adminLinks = false): string
             . '<form method="post" action="' . h(url('admin/print.php')) . '" class="inline">' . csrf_field()
             . '<input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="back" value="' . h($back) . '">'
             . '<button type="submit" class="linklike">Print label</button></form>'
-            . ($r['last_printed_at'] ? '' : '<span class="never">never printed</span>') . '</div>';
+            . (!empty($r['pending']) ? '<span class="pending">in print queue</span>'
+                : ($r['last_printed_at'] ? '<span class="printed">printed ' . h(date('d-m H:i', strtotime($r['last_printed_at']))) . '</span>'
+                : '<span class="never">never printed</span>')) . '</div>';
     }
     return $out . '</div></li>';
 }

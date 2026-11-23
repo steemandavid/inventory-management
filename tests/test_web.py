@@ -187,6 +187,8 @@ def main():
     check("print selected (bad back url ignored)", r.status_code == 303 and r.headers["location"].endswith("/inventory/admin/"))
     page = admin.get(f"{BASE}/admin/jobs.php").text
     check("4 jobs queued", page.count(">queued<") == 4, page.count(">queued<"))
+    page = admin.get(f"{BASE}/admin/").text
+    check("queued items show 'in print queue' + auto-refresh", "in print queue" in page and "refresh.js" in page)
     r = admin.post(f"{BASE}/admin/print.php", data={"id": "999999", "csrf": token}, headers={"Origin": ORIGIN})
     check("print missing item refused", "Nothing was printed" in r.text)
     r = admin.post(f"{BASE}/admin/edit.php", data={**item, "label1": "Fuses 5x20", "next": "print_another", "csrf": token},
@@ -222,7 +224,9 @@ def main():
     sql("UPDATE inv_print_jobs SET claimed_at = NOW() - INTERVAL 1 DAY WHERE status = 'printing'")
     page = admin.get(f"{BASE}/admin/jobs.php").text
     check("stuck jobs time out as failed", "agent timeout" in page)
-    check("printed item no longer 'never printed'", admin.get(f"{BASE}/admin/").text.count("never printed") == never_before - 1)
+    page = admin.get(f"{BASE}/admin/").text
+    check("printed item shows print date", re.search(r"printed \d\d-\d\d \d\d:\d\d", page))
+    check("no auto-refresh when queue empty", "refresh.js" not in page)
     admin.post(f"{BASE}/admin/print.php", data={"id": ids[0], "csrf": token}, headers={"Origin": ORIGIN})
     admin.post(f"{BASE}/admin/jobs.php", data={"action": "cancel_all", "csrf": token}, headers={"Origin": ORIGIN})
     check("cancel all queued", ">queued<" not in admin.get(f"{BASE}/admin/jobs.php").text)
