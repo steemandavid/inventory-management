@@ -39,6 +39,7 @@ header.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: .25
 .tag { font-size: .75rem; font-weight: 600; background: var(--accent); color: var(--accent-text); border-radius: 4px; padding: 1px 6px; vertical-align: 2px; }
 header nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
 header nav a { text-decoration: none; }
+header nav a.current-area { font-weight: 700; }
 
 .search { display: flex; gap: .5rem; margin: 1rem 0 .25rem; flex-wrap: wrap; }
 .search input { flex: 1 1 14rem; min-width: 0; }
@@ -107,7 +108,9 @@ footer.foot { margin: 2rem auto; color: var(--muted); font-size: .9rem; }
 section { margin-bottom: 1.5rem; }
 
 /* printer status pill (admin header) and job states */
-.printer { font-size: .82rem; text-decoration: none; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--line); }
+.printer { font-size: .82rem; font-weight: 600; text-decoration: none; border-radius: 999px; padding: 2px 10px; }
+.printer.st-online { background: #1e8e3e; color: #fff; }
+.printer.st-offline, .printer.st-never { background: #c5221f; color: #fff; }
 .st-online, .st-printed { color: var(--flash); }
 .st-offline, .st-never, .st-failed { color: var(--error); }
 .st-queued, .st-printing, .st-cancelled { color: var(--muted); }
@@ -119,7 +122,7 @@ section { margin-bottom: 1.5rem; }
   opacity: 0; pointer-events: none; transition: opacity .2s; }
 .totop.show { opacity: .9; pointer-events: auto; }
 html { scroll-behavior: smooth; }
-#bulk { margin: .25rem 0 .75rem; }
+#bulk { margin: .25rem 0 .75rem; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 
 code.token { word-break: break-all; display: block; padding: .5rem; background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
 .pending { color: var(--muted); font-style: italic; }

@@ -3,7 +3,7 @@
   'use strict';
   var btn = document.getElementById('totop');
   if (!btn) return;
-  function update() { btn.classList.toggle('show', window.scrollY > 400); }
+  function update() { btn.classList.toggle('show', window.scrollY > 150); }
   window.addEventListener('scroll', update, { passive: true });
   update();
 })();

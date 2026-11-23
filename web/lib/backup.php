@@ -81,7 +81,9 @@ function write_ods(string $path, array $data): void
     if (!$z->close()) {
         throw new RuntimeException('cannot write ' . basename($path));
     }
-    rename($tmp, $path);
+    if (!rename($tmp, $path)) {
+        throw new RuntimeException('cannot write ' . basename($path));
+    }
 }
 
 /** Make a backup set now. Returns its base name (inventory_YYYY-MM-DD_HHMM[_suffix]). */
@@ -94,8 +96,10 @@ function make_backup(string $suffix = ''): string
     $data = backup_data();
     $base = 'inventory_' . date('Y-m-d_Hi') . ($suffix !== '' ? '_' . preg_replace('/[^a-z0-9-]/', '', $suffix) : '');
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    file_put_contents("$dir/$base.json.tmp", $json);
-    rename("$dir/$base.json.tmp", "$dir/$base.json");
+    if ($json === false || file_put_contents("$dir/$base.json.tmp", $json) !== strlen($json)
+        || !rename("$dir/$base.json.tmp", "$dir/$base.json")) {
+        throw new RuntimeException("cannot write $base.json");
+    }
     write_ods("$dir/$base.ods", $data);
     save_setting('last_backup_at', now());
     apply_retention();

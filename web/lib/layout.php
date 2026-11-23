@@ -4,25 +4,33 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/print.php';
 
+/** Asset URL with the file's modification time, so browsers fetch a changed file at once. */
+function asset_url(string $file): string
+{
+    $path = dirname(__DIR__) . '/assets/' . $file;
+    return url('assets/' . $file) . '?v=' . (is_file($path) ? filemtime($path) : APP_VERSION);
+}
+
 function page_start(string $title, bool $admin = false, array $scripts = []): void
 {
     flash_take();   // must happen before any output (it clears a cookie)
     header('Content-Type: text/html; charset=utf-8');
-    $css = url('assets/style.css') . '?v=' . APP_VERSION;
+    $css = asset_url('style.css');
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         '<meta name="robots" content="noindex, nofollow">',
-        '<title>', h($title), ' · Kelder inventory</title>',
+        '<title>', h($title), ' · Inventory management</title>',
         '<link rel="stylesheet" href="', h($css), '">',
         '<link rel="icon" href="', h(url('assets/icon.svg')), '" type="image/svg+xml">';
     $scripts[] = 'common.js';
     foreach ($scripts as $s) {
-        echo '<script src="', h(url('assets/' . $s) . '?v=' . APP_VERSION), '" defer></script>';
+        echo '<script src="', h(asset_url($s)), '" defer></script>';
     }
     echo '</head><body id="top"', $admin ? ' class="admin"' : '', '><header class="top"><div class="wrap">',
-        '<a class="brand" href="', h(url($admin ? 'admin/' : '')), '">Kelder inventory', $admin ? ' <span class="tag">admin</span>' : '', '</a>';
+        '<a class="brand" href="', h(url('')), '">Inventory management</a>';
     if ($admin) {
-        echo '<nav><a href="', h(url('admin/edit.php')), '">Add</a>',
+        echo '<nav><a class="current-area" href="', h(url('admin/')), '">Admin</a>',
+            '<a href="', h(url('admin/edit.php')), '">Add</a>',
             '<a href="', h(url('admin/audit.php')), '">History</a>',
             '<a href="', h(url('admin/backups.php')), '">Backups</a>',
             '<a href="', h(url('admin/settings.php')), '">Settings</a>',

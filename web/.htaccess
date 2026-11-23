@@ -22,3 +22,11 @@ DirectoryIndex index.php
 <FilesMatch "^(config\.php|config\.example\.php|setup-seed\.json)$|\.(sql|md|log|bak|txt|json|ods)$">
   Require all denied
 </FilesMatch>
+
+# Static files: asset URLs carry ?v=<file mtime>, so they can be cached for a long time
+# and a changed file is fetched at once.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|js|woff2|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

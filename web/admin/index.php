@@ -18,7 +18,7 @@ foreach ($rows as &$r) {
 }
 unset($r);
 
-page_start('Admin', true, $pending ? ['refresh.js'] : []);
+page_start('Admin', true, $pending ? ['select.js', 'refresh.js'] : ['select.js']);
 flash_show();
 echo '<form class="search" method="get" role="search"><input type="search" name="q" value="', h($q),
     '" placeholder="Search" autocomplete="off" aria-label="Search"><button type="submit">Search</button>',
@@ -26,7 +26,10 @@ echo '<form class="search" method="get" role="search"><input type="search" name=
 echo '<p class="count">', $total, ' item', $total === 1 ? '' : 's', '</p>';
 echo '<form id="bulk" method="post" action="', h(url('admin/print.php')), '">', csrf_field(),
     '<input type="hidden" name="back" value="', h('admin/' . ($q !== '' ? '?' . http_build_query(['q' => $q]) : '')), '">',
-    '<button type="submit">Print selected labels</button></form>';
+    '<button type="submit">Print selected labels</button>',
+    '<button type="button" id="select-all" hidden>Select all</button>',
+    '<button type="button" id="select-none" hidden>Remove selection</button>',
+    '<span id="selected-count" class="note"></span></form>';
 echo '<ul class="items">';
 foreach ($rows as $r) {
     echo item_card($r, true);

@@ -62,7 +62,7 @@ case "$loc" in 301\ https://*|302\ https://*) ok "http redirects to https" ;; *)
 
 # 2. public page works, sends the security headers, leaks no source
 code=$(curl -s -D "$tmp/h" -o "$tmp/b" -w '%{http_code}' "$SITE/")
-[ "$code" = 200 ] && grep -q 'Kelder inventory' "$tmp/b" && ok "public page 200" || bad "public page: $code"
+[ "$code" = 200 ] && grep -q 'Inventory management' "$tmp/b" && ok "public page 200" || bad "public page: $code"
 for h in content-security-policy strict-transport-security x-robots-tag x-content-type-options x-frame-options; do
   grep -qi "^$h:" "$tmp/h" && ok "header $h" || bad "missing header $h"
 done

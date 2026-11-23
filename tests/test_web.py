@@ -46,6 +46,8 @@ def login(s, password=PASSWORD):
 
 
 def fresh_setup():
+    # dev only: the web container (www-data) must be able to write backups in the bind mount
+    os.chmod(os.path.join(HERE, "..", "web", "_backups"), 0o777)
     tables = ["inv_items", "inv_settings", "inv_admin", "inv_sessions", "inv_login_attempts", "inv_rate",
               "inv_audit", "inv_print_jobs", "inv_agent"]
     sql("DROP TABLE IF EXISTS " + ", ".join(tables))
@@ -108,10 +110,17 @@ def main():
     check("login redirects to admin", r.status_code == 303)
     cookie = r.headers.get("set-cookie", "")
     check("session cookie HttpOnly", "httponly" in cookie.lower(), cookie)
-    check("session cookie SameSite=Strict", "samesite=strict" in cookie.lower(), cookie)
+    check("session cookie SameSite=Lax", "samesite=lax" in cookie.lower(), cookie)
+    m = re.search(r"expires=([^;]+)", cookie, re.I)
+    import email.utils, time as _t
+    check("session cookie lasts ~1 year", m and email.utils.parsedate_to_datetime(m.group(1)).timestamp() - _t.time() > 360 * 86400, cookie)
     check("session cookie path /inventory/", "path=/inventory/" in cookie.lower(), cookie)
     r = admin.get(f"{BASE}/admin/")
     check("admin page after login", r.status_code == 200 and "6 items" in r.text)
+    check("renamed to Inventory management", "Inventory management" in r.text and "Kelder" not in r.text)
+    check("Admin link in admin nav", 'class="current-area" href="/inventory/admin/">Admin</a>' in r.text)
+    check("select all / remove selection", 'id="select-all"' in r.text and 'id="select-none"' in r.text and "select.js" in r.text)
+    check("assets versioned by mtime", re.search(r"style\.css\?v=\d{9,}", r.text))
     check("admin no-store", "no-store" in r.headers.get("cache-control", ""))
 
     # --- CSRF ---------------------------------------------------------------------------

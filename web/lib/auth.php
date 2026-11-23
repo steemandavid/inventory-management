@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 
 const SESSION_COOKIE = 'inv_session';
-const SESSION_IDLE_DAYS = 30;
+const SESSION_IDLE_DAYS = 365;     // sliding: every visit extends it
 const LOGIN_MIN_SECONDS = 0.5;       // every login attempt takes at least this long
 const IP_FREE_FAILURES = 5;          // failures before the per-IP lockout starts
 const IP_MAX_LOCK_MINUTES = 60;
@@ -118,7 +118,10 @@ function set_session_cookie(string $value, int $expires): void
         'path' => base_path(),
         'secure' => !is_dev(),
         'httponly' => true,
-        'samesite' => 'Strict',
+        // Lax, not Strict: Strict drops the cookie when the site is opened from a link in another
+        // app (mail, chat), which looked like being logged out. POSTs stay protected by the CSRF
+        // token and the origin check, and Lax never sends the cookie on cross-site POSTs.
+        'samesite' => 'Lax',
     ]);
 }
 
