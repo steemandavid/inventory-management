@@ -95,3 +95,39 @@ in the backup list. Live re-test: every admin page and action without login → 
 
 ### Tests
 `tests/test_web.py` 128/128, `tests/test_retention.py` 7/7, `tools/deploy.sh --check` all passed on the live site.
+
+## 2026-11-23 — Pi enclosure / Dymo stand (`enclosure/`)
+
+### Asked
+An enclosure for labelpi (Pi 1 B+) with the Dymo LabelWriter 450's footprint, so the Dymo stands on it;
+heat-set inserts with David's M2.5 x 5 Phillips screws; designed for Tinkercad / Bambu P1S.
+Iterations based on David's feedback and photos of the Dymo underside and the Pi:
+
+| Round | Change |
+|---|---|
+| 1 | Two parts (base + cover, screwed from below so the top panel stays flat), cable notches open at the bottom, cable spool at the front |
+| 2 | Footprint measured from photos: 127 x 186 mm, corner radii 20 (back) / 30 (front); deeper port bay |
+| 3 | Cables can't leave through the bottom: USB/RJ45 **flush with the back wall**, power hole for the micro-USB plug, cable pocket that opens to the back |
+| 4 | **Pi was mirrored** in the model (found while checking David's question against the underside photo): with components up and ports back, RJ45 and power are on the right. Fixed. Pocket opening full width (35 x 28 mm); middle screw post moved to the left side wall opposite the right one; 5 screw posts |
+| 5 | Inserts are M2.5 x 3 mm long x 3.5 mm OD: holes 3.2 mm, 4.5 mm deep (screw reaches ~4.2 mm); new test coupon 3.0 to 3.4 mm |
+| 6 | Consistent names everywhere (base, cover, top panel, screw posts, Pi standoffs, port openings, power hole, pocket opening, port fillers, locating rim); `shell.stl` renamed `cover.stl` (geometry verified identical) |
+
+### Result
+| File | Notes |
+|---|---|
+| `enclosure/pi_enclosure.scad` | parametric model; `part=` cover / base / insert_test, plus preview parts |
+| `enclosure/cover.stl` | printed upside down (top panel on the build plate), no supports |
+| `enclosure/base.stl` | printed flat, no supports |
+| `enclosure/insert_test.stl` | insert hole test coupon |
+| `enclosure/README.md` | names, layout, print settings, assembly |
+
+Copies (incl. preview PNGs) on the fileshare: `/storage/fileshare/pi-enclosure/` (`J:\pi-enclosure\`).
+Committed as `9d37d2d`.
+
+### Notes
+- OpenSCAD 2021.01 was installed on john-ai (`apt install openscad`) to generate the STLs; previews rendered
+  with `xvfb-run`. Meshes checked watertight with trimesh; positions verified by slicing the STLs.
+- Port positions are from the official B+ drawing, not measured: David should print the insert coupon and
+  the first 8 to 10 mm of `cover.stl` to check the port openings before the full print.
+- The back corners have a 5 mm radius (Dymo ~20 mm) so the back wall is straight at the ports.
+- Not printed yet; insert hole size still to be confirmed with the coupon.

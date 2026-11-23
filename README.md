@@ -26,6 +26,7 @@ The old LibreOffice spreadsheet + macro live in [`legacy/`](legacy/) and are no 
 | `tools/` | john-ai | deploy, import, Phase 0 print test, nightly backup pull, stale-backup check |
 | `tests/` | john-ai | HTTP tests and retention tests against the local docker environment |
 | `dev/` | john-ai | docker environment that mimics LWS: http://192.168.1.165:8095/inventory/ |
+| `enclosure/` | 3D printer (Bambu P1S) | OpenSCAD model + STLs of the Pi enclosure that doubles as a stand for the Dymo (see `enclosure/README.md`) |
 
 ## Daily use
 
